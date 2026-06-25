@@ -9,6 +9,21 @@ import { InventoryState, StorageUnit, Shelf, Box, Sample, AuditLog, Rack, Drawer
 const __dirname = path.resolve();
 const DATA_DIR = path.join(__dirname, "data");
 const DATA_FILE = path.join(DATA_DIR, "inventory.json");
+const DEFAULT_USERS = [
+  "Dr. Aris (Lab Director)",
+  "Sarah Lin (PhD Candidate)",
+  "James Miller (Postdoc)",
+  "Lab Assistant Bot"
+];
+
+function sanitizeUsers(users: unknown): string[] {
+  if (!Array.isArray(users)) return DEFAULT_USERS;
+  const cleaned = users
+    .filter((u): u is string => typeof u === "string")
+    .map((u) => u.trim())
+    .filter(Boolean);
+  return cleaned.length ? Array.from(new Set(cleaned)) : DEFAULT_USERS;
+}
 
 // Helper to construct a base empty or demo state
 function getDemoState(): InventoryState {
@@ -247,7 +262,7 @@ function getDemoState(): InventoryState {
   const racks: Rack[] = [];
   const drawers: Drawer[] = [];
 
-  return { storageUnits, shelves, racks, drawers, boxes, samples, auditLogs };
+  return { users: DEFAULT_USERS, storageUnits, shelves, racks, drawers, boxes, samples, auditLogs };
 }
 
 // Function to load inventory state
@@ -262,7 +277,17 @@ async function loadState(): Promise<InventoryState> {
       return demo;
     }
     const content = await fs.readFile(DATA_FILE, "utf-8");
-    return JSON.parse(content);
+    const parsed = JSON.parse(content) as Partial<InventoryState>;
+    return {
+      users: sanitizeUsers(parsed.users),
+      storageUnits: parsed.storageUnits || [],
+      shelves: parsed.shelves || [],
+      racks: parsed.racks || [],
+      drawers: parsed.drawers || [],
+      boxes: parsed.boxes || [],
+      samples: parsed.samples || [],
+      auditLogs: parsed.auditLogs || []
+    };
   } catch (err) {
     console.error("Error loading inventory state:", err);
     return getDemoState();
@@ -306,6 +331,7 @@ async function startServer() {
         res.status(400).json({ error: "Invalid inventory state format" });
         return;
       }
+      newState.users = sanitizeUsers(newState.users);
       await saveState(newState);
       res.json({ success: true, message: "Inventory state saved successfully" });
     } catch (err) {
@@ -333,6 +359,7 @@ async function startServer() {
         res.status(400).json({ error: "Invalid backup JSON file content" });
         return;
       }
+      importedState.users = sanitizeUsers(importedState.users);
       // Add audit log for restore
       const now = new Date().toISOString();
       const restoreLog: AuditLog = {

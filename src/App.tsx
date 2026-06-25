@@ -31,9 +31,17 @@ import SampleFormModal from "./components/SampleFormModal.jsx";
 import StorageFormModal from "./components/StorageFormModal.jsx";
 import BulkImportPanel from "./components/BulkImportPanel.jsx";
 
+const DEFAULT_USERS = [
+  "Dr. Aris (Lab Director)",
+  "Sarah Lin (PhD Candidate)",
+  "James Miller (Postdoc)",
+  "Lab Assistant Bot"
+];
+
 export default function App() {
   // State from server
   const [state, setState] = useState<InventoryState>({
+    users: DEFAULT_USERS,
     storageUnits: [],
     shelves: [],
     racks: [],
@@ -46,7 +54,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [currentUser, setCurrentUser] = useState("Dr. Aris (Lab Director)");
+  const [currentUser, setCurrentUser] = useState(DEFAULT_USERS[0]);
 
   // Active navigation/selection paths
   const [selectedStorageId, setSelectedStorageId] = useState<string>("");
@@ -234,6 +242,9 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         const normalized = {
+          users: Array.isArray(data.users) && data.users.length > 0
+            ? data.users.filter((u: unknown) => typeof u === "string" && u.trim().length > 0)
+            : DEFAULT_USERS,
           storageUnits: data.storageUnits || [],
           shelves: data.shelves || [],
           racks: data.racks || [],
@@ -267,6 +278,13 @@ export default function App() {
   useEffect(() => {
     fetchState();
   }, []);
+
+  useEffect(() => {
+    if (!state.users.length) return;
+    if (!state.users.includes(currentUser)) {
+      setCurrentUser(state.users[0]);
+    }
+  }, [state.users, currentUser]);
 
   // Save changes to backend server
   const saveStateToServer = async (updatedState: InventoryState, logAction: string, logDesc: string) => {
@@ -304,6 +322,37 @@ export default function App() {
     } finally {
       setSyncing(false);
     }
+  };
+
+  const handleManageUsers = () => {
+    const existing = state.users.join(", ");
+    const input = window.prompt(
+      "Set users as comma-separated names (example: Alice, Bob, Carol)",
+      existing
+    );
+
+    if (input === null) return;
+
+    const parsedUsers = input
+      .split(",")
+      .map(name => name.trim())
+      .filter(Boolean);
+
+    const uniqueUsers = Array.from(new Set(parsedUsers));
+
+    if (!uniqueUsers.length) {
+      alert("Please provide at least one user name.");
+      return;
+    }
+
+    const nextCurrentUser = uniqueUsers.includes(currentUser) ? currentUser : uniqueUsers[0];
+    setCurrentUser(nextCurrentUser);
+
+    saveStateToServer(
+      { ...state, users: uniqueUsers },
+      "Users Updated",
+      `Updated users list to ${uniqueUsers.length} member(s).`
+    );
   };
 
   // Helper for single click JSON export backup
@@ -1315,11 +1364,19 @@ export default function App() {
               onChange={e => setCurrentUser(e.target.value)}
               className="bg-transparent border-none p-0 focus:ring-0 text-xs font-semibold cursor-pointer outline-hidden"
             >
-              <option value="Dr. Aris (Lab Director)">Dr. Aris</option>
-              <option value="Sarah Lin (PhD Candidate)">Sarah Lin</option>
-              <option value="James Miller (Postdoc)">James Miller</option>
-              <option value="Lab Assistant Bot">Assistant</option>
+              {state.users.map(userName => (
+                <option key={userName} value={userName}>{userName}</option>
+              ))}
             </select>
+            <button
+              type="button"
+              onClick={handleManageUsers}
+              className="ml-1 p-0.5 rounded hover:bg-indigo-100 transition-colors"
+              title="Manage users"
+              aria-label="Manage users"
+            >
+              <Edit2 className="h-3 w-3" />
+            </button>
           </div>
 
           <button

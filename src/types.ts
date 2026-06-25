@@ -138,6 +138,7 @@ export interface AuditLog {
 }
 
 export interface InventoryState {
+  users: string[];
   storageUnits: StorageUnit[];
   shelves: Shelf[];
   racks: Rack[];
