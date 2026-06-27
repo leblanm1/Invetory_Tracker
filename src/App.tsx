@@ -1284,8 +1284,19 @@ export default function App() {
 
   const handleSaveShelf = (shelf: Omit<Shelf, "id"> & { id?: string }) => {
     let updatedShelves = [...state.shelves];
+    let updatedRacks = [...state.racks];
     let logAct = "Shelf Created";
     let logDesc = `Created new shelf level: ${shelf.name}`;
+
+    const toAlphabetLabel = (index: number) => {
+      let value = index;
+      let label = "";
+      while (value >= 0) {
+        label = String.fromCharCode(65 + (value % 26)) + label;
+        value = Math.floor(value / 26) - 1;
+      }
+      return label;
+    };
 
     if (shelf.id) {
       updatedShelves = updatedShelves.map(s => s.id === shelf.id ? { ...s, ...shelf } as Shelf : s);
@@ -1298,9 +1309,26 @@ export default function App() {
       };
       updatedShelves.push(newShelf);
       setSelectedShelfId(newShelf.id);
+
+      const rackCount = Number(newShelf.cols) || 0;
+      if (rackCount > 0) {
+        const createdAt = Date.now();
+        const autoRacks: Rack[] = Array.from({ length: rackCount }, (_, idx) => ({
+          id: `rack-${createdAt}-${idx + 1}`,
+          storageId: newShelf.storageId,
+          shelfId: newShelf.id,
+          name: toAlphabetLabel(idx),
+          rows: 6,
+          cols: 1,
+          shelfCol: idx + 1,
+          isArchived: false
+        }));
+        updatedRacks = [...updatedRacks, ...autoRacks];
+        logDesc = `Created new shelf level: ${shelf.name} with ${rackCount} auto-generated racks (${autoRacks.map(r => r.name).join(", ")}).`;
+      }
     }
 
-    saveStateToServer({ ...state, shelves: updatedShelves }, logAct, logDesc);
+    saveStateToServer({ ...state, shelves: updatedShelves, racks: updatedRacks }, logAct, logDesc);
     setStorageModalOpen(false);
   };
 
