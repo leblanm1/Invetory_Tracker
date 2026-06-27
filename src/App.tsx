@@ -58,6 +58,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchPanelOpen, setSearchPanelOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState(() => {
     if (typeof window === "undefined") return DEFAULT_USERS[0];
     return window.localStorage.getItem(CURRENT_USER_STORAGE_KEY) || DEFAULT_USERS[0];
@@ -135,6 +136,14 @@ export default function App() {
       }
     }
     return parts.join(" > ") || "Unassigned / Loose";
+  };
+
+  const getSampleConcentrationLabel = (sample: Sample) => {
+    return sample.concentration?.trim() ? `Conc: ${sample.concentration}` : "Conc: -";
+  };
+
+  const getSampleVolumeLabel = (sample: Sample) => {
+    return sample.volumeMass?.trim() ? `Vol: ${sample.volumeMass}` : "Vol: -";
   };
 
 
@@ -634,6 +643,11 @@ export default function App() {
     const sampleMatches: SearchResult[] = state.samples
       .filter(s => {
         if (s.isArchived) return false;
+        const storage = state.storageUnits.find(u => u.id === s.storageId && !u.isArchived);
+        const shelf = state.shelves.find(sh => sh.id === s.shelfId && !sh.isArchived);
+        const rack = s.rackId ? state.racks.find(r => r.id === s.rackId && !r.isArchived) : undefined;
+        const drawer = s.drawerId ? state.drawers.find(d => d.id === s.drawerId && !d.isArchived) : undefined;
+        const box = s.boxId ? state.boxes.find(b => b.id === s.boxId && !b.isArchived) : undefined;
         return lowerIncludes(
           s.chemicalName,
           s.casNumber,
@@ -644,7 +658,12 @@ export default function App() {
           s.gene,
           s.primaryDepositedBy,
           s.catalogNum,
-          s.lot
+          s.lot,
+          storage?.name,
+          shelf?.name,
+          rack?.name,
+          drawer?.name,
+          box?.name
         );
       })
       .map(sample => ({ kind: "sample", sample }));
@@ -1780,13 +1799,28 @@ export default function App() {
             <input
               type="text"
               value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
+              onChange={e => {
+                setSearchQuery(e.target.value);
+                if (!searchPanelOpen) setSearchPanelOpen(true);
+              }}
+              onFocus={() => {
+                if (searchQuery.trim()) setSearchPanelOpen(true);
+              }}
+              onKeyDown={e => {
+                if (e.key === "Enter" && searchQuery.trim()) {
+                  e.preventDefault();
+                  setSearchPanelOpen(true);
+                }
+              }}
               placeholder="Search by Chemical ID, CAS, Plasmid, Location, or Lot Number..."
               className="w-full bg-slate-100 border-none rounded-lg py-2.5 pl-10 pr-10 text-xs focus:ring-2 focus:ring-indigo-500/20 focus:bg-white transition-all text-slate-800 outline-hidden font-medium placeholder-slate-400"
             />
             {searchQuery && (
               <button
-                onClick={() => setSearchQuery("")}
+                onClick={() => {
+                  setSearchQuery("");
+                  setSearchPanelOpen(false);
+                }}
                 className="absolute inset-y-0 right-3 flex items-center text-slate-400 hover:text-slate-600"
               >
                 <X className="w-4 h-4" />
@@ -1795,13 +1829,16 @@ export default function App() {
           </div>
 
           {/* Search suggestions dropdown */}
-          {searchQuery && searchResults.length > 0 && (
+          {searchQuery && searchPanelOpen && (
             <div className="absolute left-10 right-10 mt-1 bg-white border border-slate-200 rounded-lg shadow-xl max-h-64 overflow-y-auto z-20 divide-y divide-slate-100">
               <div className="p-2 bg-slate-50 text-[10px] uppercase font-bold tracking-wider text-slate-400 flex justify-between">
                 <span>Matching Lab Inventory</span>
                 <span>{searchResults.length} hits</span>
               </div>
-              {searchResults.slice(0, 10).map((result, idx) => {
+              {searchResults.length === 0 && (
+                <div className="p-3 text-xs text-slate-500">No matches found for this search term.</div>
+              )}
+              {searchResults.map((result, idx) => {
                 if (result.kind === "sample") {
                   const s = result.sample;
                   const parentBoxDetail = state.boxes.find(b => b.id === s.boxId);
@@ -1813,6 +1850,7 @@ export default function App() {
                       onClick={() => {
                         handleSearchResultClick(result);
                         setSearchQuery("");
+                        setSearchPanelOpen(false);
                       }}
                       className="w-full p-3 text-left hover:bg-slate-50 flex justify-between items-center transition-colors text-xs"
                     >
@@ -1866,6 +1904,7 @@ export default function App() {
                     onClick={() => {
                       handleSearchResultClick(result);
                       setSearchQuery("");
+                      setSearchPanelOpen(false);
                     }}
                     className="w-full p-3 text-left hover:bg-slate-50 flex justify-between items-center transition-colors text-xs"
                   >
@@ -1881,11 +1920,6 @@ export default function App() {
                   </button>
                 );
               })}
-              {searchResults.length > 10 && (
-                <div className="p-2 text-center text-[10px] text-slate-400 bg-slate-50">
-                  And {searchResults.length - 10} other matching results...
-                </div>
-              )}
             </div>
           )}
         </div>
@@ -2823,6 +2857,9 @@ export default function App() {
                                     <p className={`text-[10px] font-mono mt-1 ${isSelected ? "text-indigo-200" : "text-slate-400"}`}>
                                       {sample.casNumber && `CAS: ${sample.casNumber} • `}Qty: {sample.qty} {sample.units}
                                     </p>
+                                    <p className={`text-[10px] font-mono mt-1 ${isSelected ? "text-indigo-200" : "text-slate-400"}`}>
+                                      {getSampleConcentrationLabel(sample)} • {getSampleVolumeLabel(sample)}
+                                    </p>
                                   </div>
                                   {sample.notes && (
                                     <p className={`text-[10px] mt-2 line-clamp-1 italic ${isSelected ? "text-indigo-100" : "text-slate-400"}`}>
@@ -2961,6 +2998,9 @@ export default function App() {
                                     </div>
                                     <p className={`text-[10px] font-mono mt-1 ${isSelected ? "text-indigo-200" : "text-slate-400"}`}>
                                       {sample.casNumber && `CAS: ${sample.casNumber} • `}Qty: {sample.qty} {sample.units}
+                                    </p>
+                                    <p className={`text-[10px] font-mono mt-1 ${isSelected ? "text-indigo-200" : "text-slate-400"}`}>
+                                      {getSampleConcentrationLabel(sample)} • {getSampleVolumeLabel(sample)}
                                     </p>
                                   </div>
                                   {sample.notes && (
@@ -3208,6 +3248,9 @@ export default function App() {
                                     <p className={`text-[10px] font-mono mt-1 ${isSelected ? "text-indigo-200" : "text-slate-400"}`}>
                                       {sample.casNumber && `CAS: ${sample.casNumber} • `}Qty: {sample.qty} {sample.units}
                                     </p>
+                                    <p className={`text-[10px] font-mono mt-1 ${isSelected ? "text-indigo-200" : "text-slate-400"}`}>
+                                      {getSampleConcentrationLabel(sample)} • {getSampleVolumeLabel(sample)}
+                                    </p>
                                   </div>
                                   {sample.notes && (
                                     <p className={`text-[10px] mt-2 line-clamp-1 italic ${isSelected ? "text-indigo-100" : "text-slate-400"}`}>
@@ -3327,6 +3370,8 @@ export default function App() {
                                     {sortField === "qty" && (sortDirection === "asc" ? "▲" : "▼")}
                                   </div>
                                 </th>
+                                <th className="py-3 px-4 border-b border-slate-100">Concentration</th>
+                                <th className="py-3 px-4 border-b border-slate-100">Volume / Mass</th>
                                 <th 
                                   onClick={() => handleSort("location")}
                                   className="py-3 px-4 cursor-pointer hover:bg-slate-100 hover:text-slate-700 transition-colors border-b border-slate-100"
@@ -3342,7 +3387,7 @@ export default function App() {
                             <tbody className="divide-y divide-slate-100 text-xs text-slate-600">
                               {sortedShelfSamples.length === 0 ? (
                                 <tr>
-                                  <td colSpan={6} className="text-center py-10 text-slate-400 italic">
+                                  <td colSpan={8} className="text-center py-10 text-slate-400 italic">
                                     No samples matching filters on this shelf.
                                   </td>
                                 </tr>
@@ -3364,6 +3409,8 @@ export default function App() {
                                         </span>
                                       </td>
                                       <td className="py-3 px-4 font-mono">{sample.qty} {sample.units}</td>
+                                      <td className="py-3 px-4 font-mono text-[11px]">{sample.concentration || "-"}</td>
+                                      <td className="py-3 px-4 font-mono text-[11px]">{sample.volumeMass || "-"}</td>
                                       <td className="py-3 px-4 text-slate-500 font-medium text-[11px]">
                                         <div className="flex items-center gap-1">
                                           {isLoose ? (
@@ -3992,6 +4039,9 @@ export default function App() {
                                               <p className={`text-[10px] font-mono mt-1 ${isSelected ? "text-indigo-200" : "text-slate-400"}`}>
                                                 {sample.casNumber && `CAS: ${sample.casNumber} • `}Qty: {sample.qty} {sample.units}
                                               </p>
+                                              <p className={`text-[10px] font-mono mt-1 ${isSelected ? "text-indigo-200" : "text-slate-400"}`}>
+                                                {getSampleConcentrationLabel(sample)} • {getSampleVolumeLabel(sample)}
+                                              </p>
                                             </div>
                                             {sample.notes && (
                                               <p className={`text-[10px] mt-2 line-clamp-1 italic ${isSelected ? "text-indigo-100" : "text-slate-400"}`}>
@@ -4364,6 +4414,9 @@ export default function App() {
                                     <p className={`text-[10px] font-mono mt-1 ${isSelected ? "text-indigo-200" : "text-slate-400"}`}>
                                       {sample.casNumber && `CAS: ${sample.casNumber} • `}Qty: {sample.qty} {sample.units}
                                     </p>
+                                    <p className={`text-[10px] font-mono mt-1 ${isSelected ? "text-indigo-200" : "text-slate-400"}`}>
+                                      {getSampleConcentrationLabel(sample)} • {getSampleVolumeLabel(sample)}
+                                    </p>
                                     {sampleShelf && (
                                       <p className={`text-[10px] font-medium mt-1.5 flex items-center gap-1 ${isSelected ? "text-indigo-200" : "text-slate-500"}`}>
                                         <MapPin className="h-3 w-3 shrink-0" />
@@ -4524,6 +4577,17 @@ export default function App() {
                     <p className="text-xs font-semibold text-indigo-600 bg-indigo-50/50 px-1.5 py-0.5 rounded border border-indigo-100/30 w-fit leading-normal">
                       {getSampleLocationString(inspectedSample)}
                     </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3.5">
+                  <div>
+                    <label className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">Concentration</label>
+                    <p className="text-xs font-mono text-slate-700">{inspectedSample.concentration || "—"}</p>
+                  </div>
+                  <div>
+                    <label className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">Volume / Mass</label>
+                    <p className="text-xs font-mono text-slate-700">{inspectedSample.volumeMass || "—"}</p>
                   </div>
                 </div>
 

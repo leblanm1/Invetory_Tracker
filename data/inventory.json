@@ -1112,6 +1112,30 @@
       "name": "AC6-3 Damian Box 3",
       "rows": 9,
       "cols": 9
+    },
+    {
+      "id": "box-1782535586496",
+      "storageId": "store-1",
+      "shelfId": "shelf-1-1",
+      "rackId": null,
+      "drawerId": null,
+      "name": "Test Box ML",
+      "rows": 8,
+      "cols": 8,
+      "shelfCol": null,
+      "isArchived": false
+    },
+    {
+      "id": "box-1782535971006",
+      "storageId": "store-1",
+      "shelfId": "shelf-1-1",
+      "rackId": null,
+      "drawerId": null,
+      "name": "XL-10 cells",
+      "rows": 8,
+      "cols": 8,
+      "shelfCol": null,
+      "isArchived": false
     }
   ],
   "samples": [
@@ -151476,6 +151500,20 @@
     }
   ],
   "auditLogs": [
+    {
+      "id": "log-1782535971007-tn9g",
+      "timestamp": "2026-06-27T04:52:51.007Z",
+      "user": "Marc-Andre",
+      "action": "Box Container Created",
+      "description": "Created box: XL-10 cells"
+    },
+    {
+      "id": "log-1782535586497-97ez",
+      "timestamp": "2026-06-27T04:46:26.497Z",
+      "user": "Marc-Andre",
+      "action": "Box Container Created",
+      "description": "Created box: Test Box ML"
+    },
     {
       "id": "log-1782534706384-mwj0",
       "timestamp": "2026-06-27T04:31:46.384Z",

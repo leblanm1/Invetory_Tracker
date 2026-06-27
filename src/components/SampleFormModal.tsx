@@ -50,6 +50,47 @@ export default function SampleFormModal({
   const [selectedDrawer, setSelectedDrawer] = useState<string>("");
   const [selectedBox, setSelectedBox] = useState<string>("");
   const [validationError, setValidationError] = useState<string>("");
+  const [concentrationValue, setConcentrationValue] = useState<string>("");
+  const [concentrationUnit, setConcentrationUnit] = useState<string>("ng/uL");
+  const [volumeValue, setVolumeValue] = useState<string>("");
+  const [volumeUnit, setVolumeUnit] = useState<string>("uL");
+  const [isCustomConcentrationUnit, setIsCustomConcentrationUnit] = useState<boolean>(false);
+  const [isCustomVolumeUnit, setIsCustomVolumeUnit] = useState<boolean>(false);
+
+  const CONCENTRATION_UNITS = [
+    "ng/uL",
+    "ug/uL",
+    "mg/mL",
+    "ug/mL",
+    "ng/mL",
+    "M",
+    "mM",
+    "uM",
+    "nM",
+    "% w/v",
+    "% v/v"
+  ];
+
+  const VOLUME_UNITS = [
+    "uL",
+    "mL",
+    "L",
+    "nL",
+    "ug",
+    "mg",
+    "g"
+  ];
+
+  const parseMeasurement = (rawValue?: string) => {
+    const raw = (rawValue || "").trim();
+    if (!raw) return { value: "", unit: "" };
+    const match = raw.match(/^([+-]?\d*\.?\d+)\s*(.*)$/);
+    if (!match) return { value: "", unit: raw };
+    return {
+      value: match[1],
+      unit: (match[2] || "").trim()
+    };
+  };
 
   // Initialize form
   useEffect(() => {
@@ -60,6 +101,18 @@ export default function SampleFormModal({
       setSelectedRack(sample.rackId || "");
       setSelectedDrawer(sample.drawerId || "");
       setSelectedBox(sample.boxId || "direct");
+      const parsedConcentration = parseMeasurement(sample.concentration);
+      setConcentrationValue(parsedConcentration.value);
+      const concentrationUnitCandidate = parsedConcentration.unit || "ng/uL";
+      setConcentrationUnit(concentrationUnitCandidate);
+      setIsCustomConcentrationUnit(
+        Boolean(concentrationUnitCandidate) && !CONCENTRATION_UNITS.includes(concentrationUnitCandidate)
+      );
+      const parsedVolume = parseMeasurement(sample.volumeMass);
+      setVolumeValue(parsedVolume.value);
+      const volumeUnitCandidate = parsedVolume.unit || "uL";
+      setVolumeUnit(volumeUnitCandidate);
+      setIsCustomVolumeUnit(Boolean(volumeUnitCandidate) && !VOLUME_UNITS.includes(volumeUnitCandidate));
     } else {
       const now = new Date().toISOString();
       const initial: Partial<Sample> = {
@@ -139,6 +192,12 @@ export default function SampleFormModal({
       setSelectedRack(defaultRackId || "");
       setSelectedDrawer(defaultDrawerId || "");
       setSelectedBox(defaultBoxId || "direct");
+      setConcentrationValue("");
+      setConcentrationUnit("ng/uL");
+      setVolumeValue("");
+      setVolumeUnit("uL");
+      setIsCustomConcentrationUnit(false);
+      setIsCustomVolumeUnit(false);
     }
     setValidationError("");
   }, [sample, isOpen, defaultStorageId, defaultShelfId, defaultRackId, defaultDrawerId, defaultBoxId, defaultRow, defaultCol]);
@@ -265,6 +324,13 @@ export default function SampleFormModal({
       }
     }
 
+    const concentrationText = concentrationValue.trim()
+      ? `${concentrationValue.trim()} ${concentrationUnit}`.trim()
+      : "";
+    const volumeMassText = volumeValue.trim()
+      ? `${volumeValue.trim()} ${volumeUnit}`.trim()
+      : "";
+
     const savedSample: Sample = {
       ...(formData as Sample),
       id: sample?.id || `sample-${Date.now()}`,
@@ -278,7 +344,9 @@ export default function SampleFormModal({
       qty: Number(formData.qty) || 1,
       chemicalName: formData.chemicalName.trim(),
       casNumber: formData.casNumber?.trim() || "",
-      itemType: formData.itemType?.trim() || "Sample"
+      itemType: formData.itemType?.trim() || "Sample",
+      concentration: concentrationText,
+      volumeMass: volumeMassText
     };
 
     onSave(savedSample);
@@ -286,7 +354,7 @@ export default function SampleFormModal({
 
   // Get advanced fields (excluding keys already editable in the basic panel)
   const basicFields: (keyof Sample)[] = [
-    "chemicalName", "casNumber", "qty", "units", "itemType", "notes", "row", "col"
+    "chemicalName", "casNumber", "qty", "units", "itemType", "concentration", "volumeMass", "notes", "row", "col"
   ];
   const advancedFields = ALL_CSV_HEADERS
     .map(h => HEADER_TO_FIELD_MAP[h.toLowerCase().replace(/[^a-z0-9]/g, "")] as keyof Sample)
@@ -408,6 +476,96 @@ export default function SampleFormModal({
                     placeholder="e.g. vials, bottles, mg, mL"
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm outline-hidden bg-white"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                    Concentration
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={concentrationValue}
+                      onChange={e => setConcentrationValue(e.target.value)}
+                      placeholder="e.g. 50"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm outline-hidden bg-white"
+                    />
+                    <select
+                      value={isCustomConcentrationUnit ? "__custom__" : concentrationUnit}
+                      onChange={e => {
+                        if (e.target.value === "__custom__") {
+                          setIsCustomConcentrationUnit(true);
+                          if (CONCENTRATION_UNITS.includes(concentrationUnit)) {
+                            setConcentrationUnit("");
+                          }
+                          return;
+                        }
+                        setIsCustomConcentrationUnit(false);
+                        setConcentrationUnit(e.target.value);
+                      }}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm focus:ring-2 focus:ring-indigo-500 outline-hidden"
+                    >
+                      {CONCENTRATION_UNITS.map(unit => (
+                        <option key={unit} value={unit}>{unit}</option>
+                      ))}
+                      <option value="__custom__">Custom unit...</option>
+                    </select>
+                    <input
+                      type="text"
+                      value={concentrationUnit}
+                      onChange={e => setConcentrationUnit(e.target.value)}
+                      placeholder="Custom unit"
+                      disabled={!isCustomConcentrationUnit}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm focus:ring-2 focus:ring-indigo-500 outline-hidden disabled:bg-slate-50 disabled:text-slate-400"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                    Volume / Mass
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={volumeValue}
+                      onChange={e => setVolumeValue(e.target.value)}
+                      placeholder="e.g. 250"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm outline-hidden bg-white"
+                    />
+                    <select
+                      value={isCustomVolumeUnit ? "__custom__" : volumeUnit}
+                      onChange={e => {
+                        if (e.target.value === "__custom__") {
+                          setIsCustomVolumeUnit(true);
+                          if (VOLUME_UNITS.includes(volumeUnit)) {
+                            setVolumeUnit("");
+                          }
+                          return;
+                        }
+                        setIsCustomVolumeUnit(false);
+                        setVolumeUnit(e.target.value);
+                      }}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm focus:ring-2 focus:ring-indigo-500 outline-hidden"
+                    >
+                      {VOLUME_UNITS.map(unit => (
+                        <option key={unit} value={unit}>{unit}</option>
+                      ))}
+                      <option value="__custom__">Custom unit...</option>
+                    </select>
+                    <input
+                      type="text"
+                      value={volumeUnit}
+                      onChange={e => setVolumeUnit(e.target.value)}
+                      placeholder="Custom unit"
+                      disabled={!isCustomVolumeUnit}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm focus:ring-2 focus:ring-indigo-500 outline-hidden disabled:bg-slate-50 disabled:text-slate-400"
+                    />
+                  </div>
                 </div>
               </div>
 
