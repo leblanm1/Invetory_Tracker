@@ -1096,27 +1096,137 @@ export default function App() {
   };
 
   // Restore operations from Trash Manager
-  const handleRestoreItem = (type: "sample" | "box" | "shelf" | "storage", item: any) => {
+  const handleRestoreItem = (type: "sample" | "box" | "drawer" | "rack" | "shelf" | "storage", item: any) => {
     let updatedState = { ...state };
     let desc = "";
 
     if (type === "sample") {
       updatedState.samples = state.samples.map(s => s.id === item.id ? { ...s, isArchived: false } : s);
+      if (item.storageId) {
+        updatedState.storageUnits = state.storageUnits.map(u => u.id === item.storageId ? { ...u, isArchived: false } : u);
+      }
+      if (item.shelfId) {
+        updatedState.shelves = state.shelves.map(s => s.id === item.shelfId ? { ...s, isArchived: false } : s);
+      }
+      if (item.rackId) {
+        updatedState.racks = state.racks.map(r => r.id === item.rackId ? { ...r, isArchived: false } : r);
+      }
+      if (item.drawerId) {
+        updatedState.drawers = state.drawers.map(d => d.id === item.drawerId ? { ...d, isArchived: false } : d);
+      }
+      if (item.boxId) {
+        updatedState.boxes = state.boxes.map(b => b.id === item.boxId ? { ...b, isArchived: false } : b);
+      }
       desc = `Restored sample "${item.chemicalName}" to storage.`;
     } else if (type === "box") {
-      // Restore box & nested samples
+      // Restore parent chain + box + nested samples
       updatedState.boxes = state.boxes.map(b => b.id === item.id ? { ...b, isArchived: false } : b);
       updatedState.samples = state.samples.map(s => s.boxId === item.id ? { ...s, isArchived: false } : s);
+      if (item.storageId) {
+        updatedState.storageUnits = state.storageUnits.map(u => u.id === item.storageId ? { ...u, isArchived: false } : u);
+      }
+      if (item.shelfId) {
+        updatedState.shelves = state.shelves.map(s => s.id === item.shelfId ? { ...s, isArchived: false } : s);
+      }
+      if (item.rackId) {
+        updatedState.racks = state.racks.map(r => r.id === item.rackId ? { ...r, isArchived: false } : r);
+      }
+      if (item.drawerId) {
+        updatedState.drawers = state.drawers.map(d => d.id === item.drawerId ? { ...d, isArchived: false } : d);
+      }
       desc = `Restored container box "${item.name}" and its samples.`;
+    } else if (type === "drawer") {
+      updatedState.drawers = state.drawers.map(d => d.id === item.id ? { ...d, isArchived: false } : d);
+      updatedState.boxes = state.boxes.map(b => b.drawerId === item.id ? { ...b, isArchived: false } : b);
+      updatedState.samples = state.samples.map(s => s.drawerId === item.id ? { ...s, isArchived: false } : s);
+      if (item.storageId) {
+        updatedState.storageUnits = state.storageUnits.map(u => u.id === item.storageId ? { ...u, isArchived: false } : u);
+      }
+      if (item.shelfId) {
+        updatedState.shelves = state.shelves.map(s => s.id === item.shelfId ? { ...s, isArchived: false } : s);
+      }
+      if (item.rackId) {
+        updatedState.racks = state.racks.map(r => r.id === item.rackId ? { ...r, isArchived: false } : r);
+      }
+      desc = `Restored drawer "${item.name}" and nested contents.`;
+    } else if (type === "rack") {
+      updatedState.racks = state.racks.map(r => r.id === item.id ? { ...r, isArchived: false } : r);
+      updatedState.drawers = state.drawers.map(d => d.rackId === item.id ? { ...d, isArchived: false } : d);
+      updatedState.boxes = state.boxes.map(b => b.rackId === item.id ? { ...b, isArchived: false } : b);
+      updatedState.samples = state.samples.map(s => s.rackId === item.id ? { ...s, isArchived: false } : s);
+      if (item.storageId) {
+        updatedState.storageUnits = state.storageUnits.map(u => u.id === item.storageId ? { ...u, isArchived: false } : u);
+      }
+      if (item.shelfId) {
+        updatedState.shelves = state.shelves.map(s => s.id === item.shelfId ? { ...s, isArchived: false } : s);
+      }
+      desc = `Restored rack "${item.name}" and nested contents.`;
     } else if (type === "shelf") {
       updatedState.shelves = state.shelves.map(s => s.id === item.id ? { ...s, isArchived: false } : s);
+      updatedState.racks = state.racks.map(r => r.shelfId === item.id ? { ...r, isArchived: false } : r);
+      updatedState.drawers = state.drawers.map(d => d.shelfId === item.id ? { ...d, isArchived: false } : d);
+      updatedState.boxes = state.boxes.map(b => b.shelfId === item.id ? { ...b, isArchived: false } : b);
+      updatedState.samples = state.samples.map(s => s.shelfId === item.id ? { ...s, isArchived: false } : s);
+      updatedState.storageUnits = state.storageUnits.map(u => u.id === item.storageId ? { ...u, isArchived: false } : u);
       desc = `Restored shelf "${item.name}".`;
     } else if (type === "storage") {
       updatedState.storageUnits = state.storageUnits.map(u => u.id === item.id ? { ...u, isArchived: false } : u);
+      updatedState.shelves = state.shelves.map(s => s.storageId === item.id ? { ...s, isArchived: false } : s);
+      updatedState.racks = state.racks.map(r => r.storageId === item.id ? { ...r, isArchived: false } : r);
+      updatedState.drawers = state.drawers.map(d => d.storageId === item.id ? { ...d, isArchived: false } : d);
+      updatedState.boxes = state.boxes.map(b => b.storageId === item.id ? { ...b, isArchived: false } : b);
+      updatedState.samples = state.samples.map(s => s.storageId === item.id ? { ...s, isArchived: false } : s);
       desc = `Restored storage unit "${item.name}".`;
     }
 
     saveStateToServer(updatedState, `${type.toUpperCase()} Restored`, desc);
+  };
+
+  const getRestoreImpactSummary = (type: "sample" | "box" | "drawer" | "rack" | "shelf" | "storage", item: any) => {
+    if (type === "sample") {
+      return "This will restore 1 sample (and unarchive its parent containers if needed).";
+    }
+
+    if (type === "box") {
+      const sampleCount = state.samples.filter(s => s.boxId === item.id).length;
+      return `This will restore 1 box and ${sampleCount} sample(s).`;
+    }
+
+    if (type === "drawer") {
+      const boxCount = state.boxes.filter(b => b.drawerId === item.id).length;
+      const sampleCount = state.samples.filter(s => s.drawerId === item.id).length;
+      return `This will restore 1 drawer, ${boxCount} box(es), and ${sampleCount} sample(s).`;
+    }
+
+    if (type === "rack") {
+      const drawerCount = state.drawers.filter(d => d.rackId === item.id).length;
+      const boxCount = state.boxes.filter(b => b.rackId === item.id).length;
+      const sampleCount = state.samples.filter(s => s.rackId === item.id).length;
+      return `This will restore 1 rack, ${drawerCount} drawer(s), ${boxCount} box(es), and ${sampleCount} sample(s).`;
+    }
+
+    if (type === "shelf") {
+      const rackCount = state.racks.filter(r => r.shelfId === item.id).length;
+      const drawerCount = state.drawers.filter(d => d.shelfId === item.id).length;
+      const boxCount = state.boxes.filter(b => b.shelfId === item.id).length;
+      const sampleCount = state.samples.filter(s => s.shelfId === item.id).length;
+      return `This will restore 1 shelf, ${rackCount} rack(s), ${drawerCount} drawer(s), ${boxCount} box(es), and ${sampleCount} sample(s).`;
+    }
+
+    const shelfCount = state.shelves.filter(s => s.storageId === item.id).length;
+    const rackCount = state.racks.filter(r => r.storageId === item.id).length;
+    const drawerCount = state.drawers.filter(d => d.storageId === item.id).length;
+    const boxCount = state.boxes.filter(b => b.storageId === item.id).length;
+    const sampleCount = state.samples.filter(s => s.storageId === item.id).length;
+    return `This will restore 1 storage unit, ${shelfCount} shelf(s), ${rackCount} rack(s), ${drawerCount} drawer(s), ${boxCount} box(es), and ${sampleCount} sample(s).`;
+  };
+
+  const handleRestoreItemWithConfirm = (type: "sample" | "box" | "drawer" | "rack" | "shelf" | "storage", item: any) => {
+    const summary = getRestoreImpactSummary(type, item);
+    const name = item.chemicalName || item.name || "item";
+    const confirmed = window.confirm(`Restore ${type} "${name}"?\n\n${summary}`);
+    if (!confirmed) return;
+    handleRestoreItem(type, item);
   };
 
   // Save manual sample additions / edits
@@ -2067,6 +2177,18 @@ export default function App() {
             Bulk Excel Import
           </button>
 
+          <button
+            onClick={() => setShowTrash(!showTrash)}
+            className={`px-3 py-2 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
+              showTrash
+                ? "bg-red-50 border border-red-200 text-red-700"
+                : "bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200/50"
+            }`}
+          >
+            <Archive className="w-3.5 h-3.5" />
+            Trash / Restore
+          </button>
+
           <div className="relative group">
             <button
               onClick={handleCSVExport}
@@ -2595,20 +2717,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* Bottom Quick Tools */}
-          <div className="p-4 border-t border-slate-100 bg-slate-50 space-y-2">
-            <button
-              onClick={() => setShowTrash(!showTrash)}
-              className={`w-full py-2 border rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                showTrash 
-                  ? "bg-red-50 border-red-200 text-red-700" 
-                  : "border-slate-200 bg-white hover:bg-slate-100 text-slate-600"
-              }`}
-            >
-              <Archive className="h-3.5 w-3.5" />
-              Trash / Restore Manager
-            </button>
-          </div>
         </aside>
 
         {/* Center Main Work Space: Grid Visualizer or Bulk Import */}
@@ -2770,10 +2878,10 @@ export default function App() {
                     </button>
                   </div>
                   <p className="text-xs text-red-800/80">
-                    All deleted samples, boxes, shelves, or storage refrigerators/freezers are archived here. You can fully restore them back to active inventory with a single click.
+                    All archived samples and containers are listed here. You can restore samples, boxes, drawers, racks, shelves, and storage units with one click.
                   </p>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-60 overflow-y-auto pt-1">
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 max-h-72 overflow-y-auto pt-1">
                     {/* Samples */}
                     <div className="p-3 bg-white border border-red-100 rounded-lg space-y-2">
                       <div className="text-[10px] font-bold text-red-700 uppercase tracking-wider">Archived Samples</div>
@@ -2788,7 +2896,7 @@ export default function App() {
                                 <p className="text-[10px] text-slate-400">Qty: {s.qty} {s.units}</p>
                               </div>
                               <button
-                                onClick={() => handleRestoreItem("sample", s)}
+                                onClick={() => handleRestoreItemWithConfirm("sample", s)}
                                 className="px-2 py-1 text-[10px] bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded font-semibold"
                               >
                                 Restore
@@ -2810,7 +2918,95 @@ export default function App() {
                             <div key={b.id} className="py-2 flex justify-between items-center">
                               <span className="font-semibold text-slate-800">{b.name}</span>
                               <button
-                                onClick={() => handleRestoreItem("box", b)}
+                                onClick={() => handleRestoreItemWithConfirm("box", b)}
+                                className="px-2 py-1 text-[10px] bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded font-semibold"
+                              >
+                                Restore
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Drawers */}
+                    <div className="p-3 bg-white border border-red-100 rounded-lg space-y-2">
+                      <div className="text-[10px] font-bold text-red-700 uppercase tracking-wider">Archived Drawers</div>
+                      {state.drawers.filter(d => d.isArchived).length === 0 ? (
+                        <p className="text-xs text-slate-400 italic">No archived drawers</p>
+                      ) : (
+                        <div className="divide-y divide-slate-100 max-h-40 overflow-y-auto text-xs">
+                          {state.drawers.filter(d => d.isArchived).map(d => (
+                            <div key={d.id} className="py-2 flex justify-between items-center">
+                              <span className="font-semibold text-slate-800">{d.name}</span>
+                              <button
+                                onClick={() => handleRestoreItemWithConfirm("drawer", d)}
+                                className="px-2 py-1 text-[10px] bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded font-semibold"
+                              >
+                                Restore
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Racks */}
+                    <div className="p-3 bg-white border border-red-100 rounded-lg space-y-2">
+                      <div className="text-[10px] font-bold text-red-700 uppercase tracking-wider">Archived Racks</div>
+                      {state.racks.filter(r => r.isArchived).length === 0 ? (
+                        <p className="text-xs text-slate-400 italic">No archived racks</p>
+                      ) : (
+                        <div className="divide-y divide-slate-100 max-h-40 overflow-y-auto text-xs">
+                          {state.racks.filter(r => r.isArchived).map(r => (
+                            <div key={r.id} className="py-2 flex justify-between items-center">
+                              <span className="font-semibold text-slate-800">{r.name}</span>
+                              <button
+                                onClick={() => handleRestoreItemWithConfirm("rack", r)}
+                                className="px-2 py-1 text-[10px] bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded font-semibold"
+                              >
+                                Restore
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Shelves */}
+                    <div className="p-3 bg-white border border-red-100 rounded-lg space-y-2">
+                      <div className="text-[10px] font-bold text-red-700 uppercase tracking-wider">Archived Shelves</div>
+                      {state.shelves.filter(s => s.isArchived).length === 0 ? (
+                        <p className="text-xs text-slate-400 italic">No archived shelves</p>
+                      ) : (
+                        <div className="divide-y divide-slate-100 max-h-40 overflow-y-auto text-xs">
+                          {state.shelves.filter(s => s.isArchived).map(s => (
+                            <div key={s.id} className="py-2 flex justify-between items-center">
+                              <span className="font-semibold text-slate-800">{s.name}</span>
+                              <button
+                                onClick={() => handleRestoreItemWithConfirm("shelf", s)}
+                                className="px-2 py-1 text-[10px] bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded font-semibold"
+                              >
+                                Restore
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Storage Units */}
+                    <div className="p-3 bg-white border border-red-100 rounded-lg space-y-2">
+                      <div className="text-[10px] font-bold text-red-700 uppercase tracking-wider">Archived Storage Units</div>
+                      {state.storageUnits.filter(u => u.isArchived).length === 0 ? (
+                        <p className="text-xs text-slate-400 italic">No archived storage units</p>
+                      ) : (
+                        <div className="divide-y divide-slate-100 max-h-40 overflow-y-auto text-xs">
+                          {state.storageUnits.filter(u => u.isArchived).map(u => (
+                            <div key={u.id} className="py-2 flex justify-between items-center">
+                              <span className="font-semibold text-slate-800">{u.name}</span>
+                              <button
+                                onClick={() => handleRestoreItemWithConfirm("storage", u)}
                                 className="px-2 py-1 text-[10px] bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded font-semibold"
                               >
                                 Restore
