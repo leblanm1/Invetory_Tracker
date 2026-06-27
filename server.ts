@@ -1,4 +1,5 @@
 import express from "express";
+import os from "node:os";
 import path from "path";
 import fs from "fs/promises";
 import { existsSync } from "fs";
@@ -8,9 +9,12 @@ import { InventoryState, StorageUnit, Shelf, Box, Sample, AuditLog, Rack, Drawer
 
 // Helper to get directory path
 const __dirname = path.resolve();
-const DATA_DIR = path.join(__dirname, "data");
+const LEGACY_DATA_DIR = path.join(__dirname, "data");
+const DATA_DIR = process.env.INVENTORY_DATA_DIR || path.join(os.homedir(), "Library", "Application Support", "Sousa Lab Inventory");
 const DATA_FILE = path.join(DATA_DIR, "inventory.json");
 const SNAPSHOT_ARCHIVE_FILE = path.join(DATA_DIR, "audit-snapshots.json");
+const LEGACY_DATA_FILE = path.join(LEGACY_DATA_DIR, "inventory.json");
+const LEGACY_SNAPSHOT_ARCHIVE_FILE = path.join(LEGACY_DATA_DIR, "audit-snapshots.json");
 const DEFAULT_USERS = [
   "Dr. Aris (Lab Director)",
   "Sarah Lin (PhD Candidate)",
@@ -65,6 +69,26 @@ async function saveSnapshotArchive(snapshots: SnapshotRecord[]): Promise<void> {
     await fs.writeFile(SNAPSHOT_ARCHIVE_FILE, JSON.stringify(snapshots, null, 2), "utf-8");
   } catch (err) {
     console.error("Error saving snapshot archive:", err);
+  }
+}
+
+async function migrateLegacyDataIfNeeded(): Promise<void> {
+  try {
+    if (DATA_DIR === LEGACY_DATA_DIR) return;
+
+    if (!existsSync(DATA_DIR)) {
+      await fs.mkdir(DATA_DIR, { recursive: true });
+    }
+
+    if (!existsSync(DATA_FILE) && existsSync(LEGACY_DATA_FILE)) {
+      await fs.copyFile(LEGACY_DATA_FILE, DATA_FILE);
+    }
+
+    if (!existsSync(SNAPSHOT_ARCHIVE_FILE) && existsSync(LEGACY_SNAPSHOT_ARCHIVE_FILE)) {
+      await fs.copyFile(LEGACY_SNAPSHOT_ARCHIVE_FILE, SNAPSHOT_ARCHIVE_FILE);
+    }
+  } catch (err) {
+    console.error("Error migrating legacy inventory data:", err);
   }
 }
 
@@ -311,6 +335,7 @@ function getDemoState(): InventoryState {
 // Function to load inventory state
 async function loadState(): Promise<InventoryState> {
   try {
+    await migrateLegacyDataIfNeeded();
     if (!existsSync(DATA_DIR)) {
       await fs.mkdir(DATA_DIR, { recursive: true });
     }
@@ -348,6 +373,7 @@ async function loadState(): Promise<InventoryState> {
 // Function to save inventory state
 async function saveState(state: InventoryState): Promise<void> {
   try {
+    await migrateLegacyDataIfNeeded();
     if (!existsSync(DATA_DIR)) {
       await fs.mkdir(DATA_DIR, { recursive: true });
     }
