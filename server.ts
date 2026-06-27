@@ -10,6 +10,7 @@ import { InventoryState, StorageUnit, Shelf, Box, Sample, AuditLog, Rack, Drawer
 const __dirname = path.resolve();
 const DATA_DIR = path.join(__dirname, "data");
 const DATA_FILE = path.join(DATA_DIR, "inventory.json");
+const SNAPSHOT_ARCHIVE_FILE = path.join(DATA_DIR, "audit-snapshots.json");
 const DEFAULT_USERS = [
   "Dr. Aris (Lab Director)",
   "Sarah Lin (PhD Candidate)",
@@ -24,6 +25,47 @@ function sanitizeUsers(users: unknown): string[] {
     .map((u) => u.trim())
     .filter(Boolean);
   return cleaned.length ? Array.from(new Set(cleaned)) : DEFAULT_USERS;
+}
+
+type SnapshotRecord = {
+  id: string;
+  timestamp?: string;
+};
+
+function mergeSnapshots(
+  primary: SnapshotRecord[] = [],
+  secondary: SnapshotRecord[] = [],
+  limit = 1000
+): SnapshotRecord[] {
+  return [
+    ...primary,
+    ...secondary.filter(snapshot => !primary.some(existing => existing.id === snapshot.id))
+  ]
+    .sort((a, b) => (b.timestamp || "").localeCompare(a.timestamp || ""))
+    .slice(0, limit);
+}
+
+async function loadSnapshotArchive(): Promise<SnapshotRecord[]> {
+  try {
+    if (!existsSync(SNAPSHOT_ARCHIVE_FILE)) return [];
+    const raw = await fs.readFile(SNAPSHOT_ARCHIVE_FILE, "utf-8");
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    console.error("Error loading snapshot archive:", err);
+    return [];
+  }
+}
+
+async function saveSnapshotArchive(snapshots: SnapshotRecord[]): Promise<void> {
+  try {
+    if (!existsSync(DATA_DIR)) {
+      await fs.mkdir(DATA_DIR, { recursive: true });
+    }
+    await fs.writeFile(SNAPSHOT_ARCHIVE_FILE, JSON.stringify(snapshots, null, 2), "utf-8");
+  } catch (err) {
+    console.error("Error saving snapshot archive:", err);
+  }
 }
 
 // Helper to construct a base empty or demo state
@@ -275,10 +317,17 @@ async function loadState(): Promise<InventoryState> {
     if (!existsSync(DATA_FILE)) {
       const demo = getDemoState();
       await fs.writeFile(DATA_FILE, JSON.stringify(demo, null, 2), "utf-8");
+      await saveSnapshotArchive((demo.auditSnapshots || []) as SnapshotRecord[]);
       return demo;
     }
     const content = await fs.readFile(DATA_FILE, "utf-8");
     const parsed = JSON.parse(content) as Partial<InventoryState>;
+    const archivedSnapshots = await loadSnapshotArchive();
+    const mergedSnapshots = mergeSnapshots(
+      (parsed.auditSnapshots || []) as SnapshotRecord[],
+      archivedSnapshots,
+      1000
+    );
     return {
       users: sanitizeUsers(parsed.users),
       storageUnits: parsed.storageUnits || [],
@@ -288,7 +337,7 @@ async function loadState(): Promise<InventoryState> {
       boxes: parsed.boxes || [],
       samples: parsed.samples || [],
       auditLogs: parsed.auditLogs || [],
-      auditSnapshots: parsed.auditSnapshots || []
+      auditSnapshots: mergedSnapshots as InventoryState["auditSnapshots"]
     };
   } catch (err) {
     console.error("Error loading inventory state:", err);
@@ -303,6 +352,13 @@ async function saveState(state: InventoryState): Promise<void> {
       await fs.mkdir(DATA_DIR, { recursive: true });
     }
     await fs.writeFile(DATA_FILE, JSON.stringify(state, null, 2), "utf-8");
+    const archivedSnapshots = await loadSnapshotArchive();
+    const mergedArchive = mergeSnapshots(
+      (state.auditSnapshots || []) as SnapshotRecord[],
+      archivedSnapshots,
+      1000
+    );
+    await saveSnapshotArchive(mergedArchive);
   } catch (err) {
     console.error("Error saving inventory state:", err);
     throw err;

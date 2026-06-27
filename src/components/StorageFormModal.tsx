@@ -157,8 +157,8 @@ export default function StorageFormModal({
         setDrawerSlot(preselectedDrawerSlot || "");
         setDrawerBoxCapacity(4);
         setIsGridLayout(true);
-        setRows(mode === "rack" ? 6 : 8);
-        setCols(mode === "rack" ? 1 : 8);
+        setRows(mode === "rack" ? 6 : 9);
+        setCols(mode === "rack" ? 1 : 9);
 
         setIsShelfGridLayout(false);
         setShelfCols(6);
