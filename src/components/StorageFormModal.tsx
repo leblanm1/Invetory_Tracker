@@ -56,8 +56,8 @@ export default function StorageFormModal({
 
   // Grid specific (for boxes or racks)
   const [isGridLayout, setIsGridLayout] = useState(true);
-  const [rows, setRows] = useState<number>(8);
-  const [cols, setCols] = useState<number>(8);
+  const [rows, setRows] = useState<number>(6);
+  const [cols, setCols] = useState<number>(1);
 
   // Shelf Layout Specific
   const [isShelfGridLayout, setIsShelfGridLayout] = useState(false);
@@ -122,8 +122,8 @@ export default function StorageFormModal({
         setRackId(preselectedRackId || "");
         setDrawerId(preselectedDrawerId || "");
         setIsGridLayout(true);
-        setRows(mode === "rack" ? 4 : 8); // default racks to smaller grids like 4x4
-        setCols(mode === "rack" ? 4 : 8);
+        setRows(mode === "rack" ? 6 : 8);
+        setCols(mode === "rack" ? 1 : 8);
 
         setIsShelfGridLayout(false);
         setShelfCols(6);

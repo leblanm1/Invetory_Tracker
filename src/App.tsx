@@ -1306,8 +1306,19 @@ export default function App() {
 
   const handleSaveRack = (rack: Omit<Rack, "id"> & { id?: string }) => {
     let updatedRacks = [...state.racks];
+    let updatedDrawers = [...state.drawers];
     let logAct = "Rack Created";
     let logDesc = `Created new rack: ${rack.name}`;
+
+    const toAlphabetLabel = (index: number) => {
+      let value = index;
+      let label = "";
+      while (value >= 0) {
+        label = String.fromCharCode(65 + (value % 26)) + label;
+        value = Math.floor(value / 26) - 1;
+      }
+      return label;
+    };
 
     if (rack.id) {
       updatedRacks = updatedRacks.map(r => r.id === rack.id ? { ...r, ...rack } as Rack : r);
@@ -1319,10 +1330,26 @@ export default function App() {
         id: `rack-${Date.now()}`
       };
       updatedRacks.push(newRack);
+
+      const drawerCount = Number(newRack.rows) || 0;
+      if (drawerCount > 0) {
+        const createdAt = Date.now();
+        const autoDrawers: Drawer[] = Array.from({ length: drawerCount }, (_, idx) => ({
+          id: `drawer-${createdAt}-${idx + 1}`,
+          rackId: newRack.id,
+          shelfId: newRack.shelfId,
+          storageId: newRack.storageId,
+          name: toAlphabetLabel(idx),
+          isArchived: false
+        }));
+        updatedDrawers = [...updatedDrawers, ...autoDrawers];
+        logDesc = `Created new rack: ${rack.name} with ${drawerCount} auto-generated drawers (${autoDrawers.map(d => d.name).join(", ")}).`;
+      }
+
       setSelectedRackId(newRack.id);
     }
 
-    saveStateToServer({ ...state, racks: updatedRacks }, logAct, logDesc);
+    saveStateToServer({ ...state, racks: updatedRacks, drawers: updatedDrawers }, logAct, logDesc);
     setStorageModalOpen(false);
   };
 
