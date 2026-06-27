@@ -88,6 +88,8 @@ export default function App() {
   // Form Modals
   const [sampleModalOpen, setSampleModalOpen] = useState(false);
   const [editingSample, setEditingSample] = useState<Sample | null>(null);
+  const [sampleDefaultRow, setSampleDefaultRow] = useState<number | null>(null);
+  const [sampleDefaultCol, setSampleDefaultCol] = useState<number | null>(null);
 
   const [storageModalOpen, setStorageModalOpen] = useState(false);
   const [storageModalMode, setStorageModalMode] = useState<"storage" | "shelf" | "rack" | "drawer" | "box">("storage");
@@ -1247,6 +1249,8 @@ export default function App() {
     const updatedState = { ...state, samples: updatedSamples };
     saveStateToServer(updatedState, logAct, logDesc);
     setSampleModalOpen(false);
+    setSampleDefaultRow(null);
+    setSampleDefaultCol(null);
     setSelectedStorageId(savedSample.storageId);
     setSelectedShelfId(savedSample.shelfId);
     setSelectedRackId(savedSample.rackId || "");
@@ -1397,6 +1401,21 @@ export default function App() {
     setSelectedStorageId(fallbackShelf.storageId);
     setSelectedShelfId(selectedShelfId || fallbackShelf.id);
     setEditingSample(null);
+    setSampleDefaultRow(null);
+    setSampleDefaultCol(null);
+    setSampleModalOpen(true);
+  };
+
+  const handleOpenNewSampleAtGridCell = (row: number, col: number) => {
+    if (!currentBox) return;
+    setEditingSample(null);
+    setSelectedStorageId(currentBox.storageId);
+    setSelectedShelfId(currentBox.shelfId);
+    setSelectedRackId(currentBox.rackId || "");
+    setSelectedDrawerId(currentBox.drawerId || "");
+    setSelectedBoxId(currentBox.id);
+    setSampleDefaultRow(row);
+    setSampleDefaultCol(col);
     setSampleModalOpen(true);
   };
 
@@ -3072,7 +3091,13 @@ export default function App() {
                                   onDragOver={(e) => handleDragOver(e, rowNum, colNum)}
                                   onDragLeave={handleDragLeave}
                                   onDrop={(e) => handleDropOnGrid(e, rowNum, colNum)}
-                                  onClick={() => slotSample && setSelectedSampleId(slotSample.id)}
+                                  onClick={() => {
+                                    if (slotSample) {
+                                      setSelectedSampleId(slotSample.id);
+                                      return;
+                                    }
+                                    handleOpenNewSampleAtGridCell(rowNum, colNum);
+                                  }}
                                   className={`w-11 h-11 border rounded flex flex-col items-center justify-center cursor-pointer transition-all ${bgClass}`}
                                   title={slotSample ? `${slotSample.chemicalName} (Qty: ${slotSample.qty} ${slotSample.units})` : `Empty slot Row ${rowNum}, Col ${colNum}`}
                                 >
@@ -5192,7 +5217,11 @@ export default function App() {
       {/* Form Modals */}
       <SampleFormModal
         isOpen={sampleModalOpen}
-        onClose={() => setSampleModalOpen(false)}
+        onClose={() => {
+          setSampleModalOpen(false);
+          setSampleDefaultRow(null);
+          setSampleDefaultCol(null);
+        }}
         onSave={handleSaveSample}
         sample={editingSample}
         storageUnits={state.storageUnits}
@@ -5206,6 +5235,8 @@ export default function App() {
         defaultRackId={selectedRackId}
         defaultDrawerId={selectedDrawerId}
         defaultBoxId={selectedBoxId}
+        defaultRow={sampleDefaultRow}
+        defaultCol={sampleDefaultCol}
       />
 
       <StorageFormModal
