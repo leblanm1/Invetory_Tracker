@@ -573,6 +573,53 @@ export default function App() {
     return state.boxes.find(b => b.id === selectedBoxId && !b.isArchived);
   }, [state.boxes, selectedBoxId]);
 
+  // Keep the selected path coherent so breadcrumbs/tree always show full ancestry.
+  useEffect(() => {
+    let nextStorageId = selectedStorageId;
+    let nextShelfId = selectedShelfId;
+    let nextRackId = selectedRackId;
+
+    if (selectedBoxId) {
+      const box = state.boxes.find(b => b.id === selectedBoxId && !b.isArchived);
+      if (!box) return;
+      nextStorageId = box.storageId;
+      nextShelfId = box.shelfId;
+      nextRackId = box.rackId || "";
+    } else if (selectedDrawerId) {
+      const drawer = state.drawers.find(d => d.id === selectedDrawerId && !d.isArchived);
+      if (!drawer) return;
+      nextStorageId = drawer.storageId;
+      nextShelfId = drawer.shelfId;
+      nextRackId = drawer.rackId;
+    } else if (selectedRackId) {
+      const rack = state.racks.find(r => r.id === selectedRackId && !r.isArchived);
+      if (!rack) return;
+      nextStorageId = rack.storageId;
+      nextShelfId = rack.shelfId;
+    } else if (selectedShelfId) {
+      const shelf = state.shelves.find(s => s.id === selectedShelfId && !s.isArchived);
+      if (!shelf) return;
+      nextStorageId = shelf.storageId;
+    } else {
+      return;
+    }
+
+    if (nextStorageId !== selectedStorageId) setSelectedStorageId(nextStorageId);
+    if (nextShelfId !== selectedShelfId) setSelectedShelfId(nextShelfId);
+    if (nextRackId !== selectedRackId) setSelectedRackId(nextRackId);
+  }, [
+    selectedStorageId,
+    selectedShelfId,
+    selectedRackId,
+    selectedDrawerId,
+    selectedBoxId,
+    state.storageUnits,
+    state.shelves,
+    state.racks,
+    state.drawers,
+    state.boxes
+  ]);
+
   const availableDestinationsOnShelf = useMemo(() => {
     if (!currentShelf) return [];
     const options: { id: string; name: string; type: "box" | "drawer" }[] = [];
