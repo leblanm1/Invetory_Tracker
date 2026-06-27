@@ -94,6 +94,7 @@ export default function App() {
   const [storageModalOpen, setStorageModalOpen] = useState(false);
   const [storageModalMode, setStorageModalMode] = useState<"storage" | "shelf" | "rack" | "drawer" | "box">("storage");
   const [editingStorageItem, setEditingStorageItem] = useState<StorageUnit | Shelf | Rack | Drawer | Box | null>(null);
+  const [boxDefaultDrawerSlot, setBoxDefaultDrawerSlot] = useState<number | null>(null);
 
   // Drag and drop visual cues
   const [draggedSampleId, setDraggedSampleId] = useState<string | null>(null);
@@ -256,6 +257,9 @@ export default function App() {
   };
   const getDrawerSamplesCount = (drawerId: string) => {
     return state.samples.filter(s => s.drawerId === drawerId && !s.isArchived).length;
+  };
+  const getDrawerCapacity = (drawer?: Drawer | null) => {
+    return Math.max(1, Math.min(500, Number(drawer?.boxCapacity) || 4));
   };
   const getBoxSamplesCount = (boxId: string) => {
     return state.samples.filter(s => s.boxId === boxId && !s.isArchived).length;
@@ -1282,11 +1286,20 @@ export default function App() {
     setStorageModalOpen(false);
   };
 
-  const handleSaveShelf = (shelf: Omit<Shelf, "id"> & { id?: string }) => {
+  const handleSaveShelf = (
+    shelf: Omit<Shelf, "id"> & {
+      id?: string;
+      defaultRackRows?: number | null;
+      defaultRackCols?: number | null;
+      defaultDrawerBoxCapacity?: number | null;
+    }
+  ) => {
+    const { defaultRackRows, defaultRackCols, defaultDrawerBoxCapacity, ...shelfData } = shelf;
     let updatedShelves = [...state.shelves];
     let updatedRacks = [...state.racks];
+    let updatedDrawers = [...state.drawers];
     let logAct = "Shelf Created";
-    let logDesc = `Created new shelf level: ${shelf.name}`;
+    let logDesc = `Created new shelf level: ${shelfData.name}`;
 
     const toAlphabetLabel = (index: number) => {
       let value = index;
@@ -1298,19 +1311,22 @@ export default function App() {
       return label;
     };
 
-    if (shelf.id) {
-      updatedShelves = updatedShelves.map(s => s.id === shelf.id ? { ...s, ...shelf } as Shelf : s);
+    if (shelfData.id) {
+      updatedShelves = updatedShelves.map(s => s.id === shelfData.id ? { ...s, ...shelfData } as Shelf : s);
       logAct = "Shelf Updated";
-      logDesc = `Renamed shelf level to "${shelf.name}"`;
+      logDesc = `Renamed shelf level to "${shelfData.name}"`;
     } else {
       const newShelf: Shelf = {
-        ...shelf,
+        ...shelfData,
         id: `shelf-${Date.now()}`
       };
       updatedShelves.push(newShelf);
       setSelectedShelfId(newShelf.id);
 
       const rackCount = Number(newShelf.cols) || 0;
+      const rackRows = Math.max(1, Math.min(20, Number(defaultRackRows) || 6));
+      const rackCols = Math.max(1, Math.min(20, Number(defaultRackCols) || 1));
+      const drawerBoxCapacity = Math.max(1, Math.min(500, Number(defaultDrawerBoxCapacity) || 4));
       if (rackCount > 0) {
         const createdAt = Date.now();
         const autoRacks: Rack[] = Array.from({ length: rackCount }, (_, idx) => ({
@@ -1318,25 +1334,91 @@ export default function App() {
           storageId: newShelf.storageId,
           shelfId: newShelf.id,
           name: toAlphabetLabel(idx),
-          rows: 6,
-          cols: 1,
+          rows: rackRows,
+          cols: rackCols,
           shelfCol: idx + 1,
           isArchived: false
         }));
         updatedRacks = [...updatedRacks, ...autoRacks];
-        logDesc = `Created new shelf level: ${shelf.name} with ${rackCount} auto-generated racks (${autoRacks.map(r => r.name).join(", ")}).`;
+
+        const autoDrawers: Drawer[] = autoRacks.flatMap((rackItem, rackIdx) =>
+          Array.from({ length: rackRows }, (_, drawerIdx) => ({
+            id: `drawer-${createdAt}-${rackIdx + 1}-${drawerIdx + 1}`,
+            rackId: rackItem.id,
+            shelfId: rackItem.shelfId,
+            storageId: rackItem.storageId,
+            name: toAlphabetLabel(drawerIdx),
+            boxCapacity: drawerBoxCapacity,
+            isArchived: false
+          }))
+        );
+
+        updatedDrawers = [...updatedDrawers, ...autoDrawers];
+        logDesc = `Created new shelf level: ${shelfData.name} with ${rackCount} auto-generated racks and ${autoDrawers.length} drawers.`;
       }
     }
 
-    saveStateToServer({ ...state, shelves: updatedShelves, racks: updatedRacks }, logAct, logDesc);
+    if (shelfData.id) {
+      const savedShelf = updatedShelves.find(s => s.id === shelfData.id);
+      const desiredRackCount = Number(savedShelf?.cols) || 0;
+      const rackRows = Math.max(1, Math.min(20, Number(defaultRackRows) || 6));
+      const rackCols = Math.max(1, Math.min(20, Number(defaultRackCols) || 1));
+      const drawerBoxCapacity = Math.max(1, Math.min(500, Number(defaultDrawerBoxCapacity) || 4));
+
+      if (savedShelf && desiredRackCount > 0) {
+        const activeRacks = updatedRacks.filter(r => r.shelfId === savedShelf.id && !r.isArchived);
+        const occupiedSlots = new Set(activeRacks.map(r => r.shelfCol).filter((slot): slot is number => typeof slot === "number"));
+        const missingSlots = Array.from({ length: desiredRackCount }, (_, idx) => idx + 1)
+          .filter(slot => !occupiedSlots.has(slot));
+
+        if (missingSlots.length > 0) {
+          const createdAt = Date.now();
+          const autoRacks: Rack[] = missingSlots.map((slot, idx) => ({
+            id: `rack-${createdAt}-${idx + 1}`,
+            storageId: savedShelf.storageId,
+            shelfId: savedShelf.id,
+            name: toAlphabetLabel(slot - 1),
+            rows: rackRows,
+            cols: rackCols,
+            shelfCol: slot,
+            isArchived: false
+          }));
+
+          updatedRacks = [...updatedRacks, ...autoRacks];
+
+          const autoDrawers: Drawer[] = autoRacks.flatMap((rackItem, rackIdx) =>
+            Array.from({ length: rackRows }, (_, drawerIdx) => ({
+              id: `drawer-${createdAt}-${rackIdx + 1}-${drawerIdx + 1}`,
+              rackId: rackItem.id,
+              shelfId: rackItem.shelfId,
+              storageId: rackItem.storageId,
+              name: toAlphabetLabel(drawerIdx),
+              boxCapacity: drawerBoxCapacity,
+              isArchived: false
+            }))
+          );
+
+          updatedDrawers = [...updatedDrawers, ...autoDrawers];
+          logDesc = `Updated shelf "${shelfData.name}" and auto-created ${autoRacks.length} racks for new positions with ${autoDrawers.length} drawers.`;
+        }
+      }
+    }
+
+    saveStateToServer({ ...state, shelves: updatedShelves, racks: updatedRacks, drawers: updatedDrawers }, logAct, logDesc);
     setStorageModalOpen(false);
   };
 
-  const handleSaveRack = (rack: Omit<Rack, "id"> & { id?: string }) => {
+  const handleSaveRack = (
+    rack: Omit<Rack, "id"> & {
+      id?: string;
+      defaultDrawerBoxCapacity?: number | null;
+    }
+  ) => {
+    const { defaultDrawerBoxCapacity, ...rackData } = rack;
     let updatedRacks = [...state.racks];
     let updatedDrawers = [...state.drawers];
     let logAct = "Rack Created";
-    let logDesc = `Created new rack: ${rack.name}`;
+    let logDesc = `Created new rack: ${rackData.name}`;
 
     const toAlphabetLabel = (index: number) => {
       let value = index;
@@ -1348,18 +1430,54 @@ export default function App() {
       return label;
     };
 
-    if (rack.id) {
-      updatedRacks = updatedRacks.map(r => r.id === rack.id ? { ...r, ...rack } as Rack : r);
+    if (rackData.id) {
+      updatedRacks = updatedRacks.map(r => r.id === rackData.id ? { ...r, ...rackData } as Rack : r);
       logAct = "Rack Updated";
-      logDesc = `Updated configurations of rack "${rack.name}"`;
+      logDesc = `Updated configurations of rack "${rackData.name}"`;
+
+      const desiredDrawerCount = Number(rackData.rows) || 0;
+      const drawerBoxCapacity = Math.max(1, Math.min(500, Number(defaultDrawerBoxCapacity) || 4));
+      if (desiredDrawerCount > 0) {
+        const existingDrawers = updatedDrawers.filter(d => d.rackId === rackData.id && !d.isArchived);
+        const drawersToCreate = desiredDrawerCount - existingDrawers.length;
+
+        if (drawersToCreate > 0) {
+          const usedNames = new Set(existingDrawers.map(d => d.name.trim().toUpperCase()));
+          let cursor = 0;
+          const nextAvailableLabel = () => {
+            while (usedNames.has(toAlphabetLabel(cursor))) {
+              cursor += 1;
+            }
+            const label = toAlphabetLabel(cursor);
+            usedNames.add(label);
+            cursor += 1;
+            return label;
+          };
+
+          const createdAt = Date.now();
+          const autoDrawers: Drawer[] = Array.from({ length: drawersToCreate }, (_, idx) => ({
+            id: `drawer-${createdAt}-${idx + 1}`,
+            rackId: rackData.id as string,
+            shelfId: rackData.shelfId,
+            storageId: rackData.storageId,
+            name: nextAvailableLabel(),
+            boxCapacity: drawerBoxCapacity,
+            isArchived: false
+          }));
+
+          updatedDrawers = [...updatedDrawers, ...autoDrawers];
+          logDesc = `Updated configurations of rack "${rackData.name}" and auto-created ${autoDrawers.length} drawers.`;
+        }
+      }
     } else {
       const newRack: Rack = {
-        ...rack,
+        ...rackData,
         id: `rack-${Date.now()}`
       };
       updatedRacks.push(newRack);
 
       const drawerCount = Number(newRack.rows) || 0;
+      const drawerBoxCapacity = Math.max(1, Math.min(500, Number(defaultDrawerBoxCapacity) || 4));
       if (drawerCount > 0) {
         const createdAt = Date.now();
         const autoDrawers: Drawer[] = Array.from({ length: drawerCount }, (_, idx) => ({
@@ -1368,10 +1486,11 @@ export default function App() {
           shelfId: newRack.shelfId,
           storageId: newRack.storageId,
           name: toAlphabetLabel(idx),
+          boxCapacity: drawerBoxCapacity,
           isArchived: false
         }));
         updatedDrawers = [...updatedDrawers, ...autoDrawers];
-        logDesc = `Created new rack: ${rack.name} with ${drawerCount} auto-generated drawers (${autoDrawers.map(d => d.name).join(", ")}).`;
+        logDesc = `Created new rack: ${rackData.name} with ${drawerCount} auto-generated drawers (${autoDrawers.map(d => d.name).join(", ")}).`;
       }
 
       setSelectedRackId(newRack.id);
@@ -1382,17 +1501,31 @@ export default function App() {
   };
 
   const handleSaveDrawer = (drawer: Omit<Drawer, "id"> & { id?: string }) => {
+    const requestedCapacity = Math.max(1, Math.min(500, Number(drawer.boxCapacity) || 4));
+
     let updatedDrawers = [...state.drawers];
     let logAct = "Drawer Created";
     let logDesc = `Created new drawer: ${drawer.name}`;
 
     if (drawer.id) {
-      updatedDrawers = updatedDrawers.map(d => d.id === drawer.id ? { ...d, ...drawer } as Drawer : d);
+      const activeBoxesInDrawer = state.boxes.filter(b => b.drawerId === drawer.id && !b.isArchived);
+      const highestAssignedSlot = activeBoxesInDrawer.reduce((max, b) => {
+        const slot = typeof b.drawerSlot === "number" ? b.drawerSlot : 0;
+        return Math.max(max, slot);
+      }, 0);
+
+      if (activeBoxesInDrawer.length > requestedCapacity || highestAssignedSlot > requestedCapacity) {
+        alert(`Cannot set drawer capacity to ${requestedCapacity}. This drawer currently uses ${activeBoxesInDrawer.length} box(es) and slot ${highestAssignedSlot}.`);
+        return;
+      }
+
+      updatedDrawers = updatedDrawers.map(d => d.id === drawer.id ? { ...d, ...drawer, boxCapacity: requestedCapacity } as Drawer : d);
       logAct = "Drawer Updated";
       logDesc = `Updated configurations of drawer "${drawer.name}"`;
     } else {
       const newDrawer: Drawer = {
         ...drawer,
+        boxCapacity: requestedCapacity,
         id: `drawer-${Date.now()}`
       };
       updatedDrawers.push(newDrawer);
@@ -1404,19 +1537,73 @@ export default function App() {
   };
 
   const handleSaveBox = (box: Omit<Box, "id"> & { id?: string }) => {
+    const targetDrawer = box.drawerId ? state.drawers.find(d => d.id === box.drawerId && !d.isArchived) : null;
+    let boxToSave: Omit<Box, "id"> & { id?: string } = {
+      ...box,
+      drawerSlot: box.drawerId ? box.drawerSlot ?? null : null
+    };
+
+    if (targetDrawer) {
+      const drawerCapacity = getDrawerCapacity(targetDrawer);
+      const existingInDrawer = state.boxes.filter(
+        b => !b.isArchived && b.drawerId === targetDrawer.id && b.id !== box.id
+      ).length;
+      if (existingInDrawer >= drawerCapacity) {
+        alert(`Drawer "${targetDrawer.name}" is at capacity (${drawerCapacity} boxes).`);
+        return;
+      }
+
+      const occupiedSlots = new Set(
+        state.boxes
+          .filter(b => !b.isArchived && b.drawerId === targetDrawer.id && b.id !== box.id && typeof b.drawerSlot === "number")
+          .map(b => b.drawerSlot as number)
+      );
+
+      let finalDrawerSlot = typeof box.drawerSlot === "number" ? box.drawerSlot : null;
+      if (finalDrawerSlot && (finalDrawerSlot < 1 || finalDrawerSlot > drawerCapacity)) {
+        alert(`Drawer slot must be between 1 and ${drawerCapacity}.`);
+        return;
+      }
+      if (finalDrawerSlot && occupiedSlots.has(finalDrawerSlot)) {
+        alert(`Drawer slot ${finalDrawerSlot} is already occupied in "${targetDrawer.name}".`);
+        return;
+      }
+
+      if (!finalDrawerSlot) {
+        finalDrawerSlot = Array.from({ length: drawerCapacity }, (_, idx) => idx + 1)
+          .find(slot => !occupiedSlots.has(slot)) || null;
+        if (!finalDrawerSlot) {
+          alert(`No free drawer slots remain in "${targetDrawer.name}".`);
+          return;
+        }
+      }
+
+      boxToSave = {
+        ...boxToSave,
+        drawerSlot: finalDrawerSlot
+      };
+    }
+
+    if (!box.drawerId) {
+      boxToSave = {
+        ...boxToSave,
+        drawerSlot: null
+      };
+    }
+
     let updatedBoxes = [...state.boxes];
     let logAct = "Box Container Created";
-    let logDesc = `Created box: ${box.name}`;
+    let logDesc = `Created box: ${boxToSave.name}`;
     let finalBox: Box;
 
-    if (box.id) {
-      updatedBoxes = updatedBoxes.map(b => b.id === box.id ? { ...b, ...box } as Box : b);
-      finalBox = updatedBoxes.find(b => b.id === box.id) as Box;
+    if (boxToSave.id) {
+      updatedBoxes = updatedBoxes.map(b => b.id === boxToSave.id ? { ...b, ...boxToSave } as Box : b);
+      finalBox = updatedBoxes.find(b => b.id === boxToSave.id) as Box;
       logAct = "Box Updated";
-      logDesc = `Updated configurations of box "${box.name}"`;
+      logDesc = `Updated configurations of box "${boxToSave.name}"`;
     } else {
       const newBox: Box = {
-        ...box,
+        ...boxToSave,
         id: `box-${Date.now()}`
       };
       updatedBoxes.push(newBox);
@@ -1429,6 +1616,7 @@ export default function App() {
     setSelectedRackId(finalBox.rackId || "");
     setSelectedDrawerId(finalBox.drawerId || "");
     setSelectedBoxId(finalBox.id);
+    setBoxDefaultDrawerSlot(null);
     setStorageModalOpen(false);
   };
 
@@ -1472,6 +1660,20 @@ export default function App() {
     setSampleDefaultRow(row);
     setSampleDefaultCol(col);
     setSampleModalOpen(true);
+  };
+
+  const handleOpenNewBoxModal = (drawerSlot: number | null = null) => {
+    if (currentDrawer) {
+      setSelectedStorageId(currentDrawer.storageId);
+      setSelectedShelfId(currentDrawer.shelfId);
+      setSelectedRackId(currentDrawer.rackId);
+      setSelectedDrawerId(currentDrawer.id);
+      setSelectedBoxId(null);
+    }
+    setEditingStorageItem(null);
+    setStorageModalMode("box");
+    setBoxDefaultDrawerSlot(drawerSlot);
+    setStorageModalOpen(true);
   };
 
   const bulkSelectableItems = useMemo(() => {
@@ -1560,6 +1762,67 @@ export default function App() {
     }
 
     if (bulkItemType === "box") {
+      const destinationSlotMap = new Map<string, number | null>();
+      if (destination.drawerId) {
+        const destinationDrawer = state.drawers.find(d => d.id === destination.drawerId && !d.isArchived);
+        if (destinationDrawer) {
+          const drawerCapacity = getDrawerCapacity(destinationDrawer);
+          const existingCount = state.boxes.filter(
+            b => !b.isArchived && b.drawerId === destinationDrawer.id && !bulkSelectedIds.includes(b.id)
+          ).length;
+          const incomingCount = state.boxes.filter(
+            b => bulkSelectedIds.includes(b.id) && b.drawerId !== destinationDrawer.id
+          ).length;
+          if (existingCount + incomingCount > drawerCapacity) {
+            alert(`Cannot move ${incomingCount} box(es). Drawer "${destinationDrawer.name}" capacity is ${drawerCapacity}.`);
+            return;
+          }
+
+          const occupiedSlots = new Set(
+            state.boxes
+              .filter(
+                b => !b.isArchived &&
+                  b.drawerId === destinationDrawer.id &&
+                  !bulkSelectedIds.includes(b.id) &&
+                  typeof b.drawerSlot === "number"
+              )
+              .map(b => b.drawerSlot as number)
+          );
+
+          const movingBoxes = state.boxes.filter(b => bulkSelectedIds.includes(b.id));
+          let slotCursor = 1;
+          const allocateNextSlot = (): number | null => {
+            while (slotCursor <= drawerCapacity) {
+              if (!occupiedSlots.has(slotCursor)) {
+                const slot = slotCursor;
+                occupiedSlots.add(slot);
+                slotCursor += 1;
+                return slot;
+              }
+              slotCursor += 1;
+            }
+            return null;
+          };
+
+          movingBoxes.forEach(boxItem => {
+            if (
+              boxItem.drawerId === destinationDrawer.id &&
+              typeof boxItem.drawerSlot === "number" &&
+              boxItem.drawerSlot >= 1 &&
+              boxItem.drawerSlot <= drawerCapacity &&
+              !occupiedSlots.has(boxItem.drawerSlot)
+            ) {
+              occupiedSlots.add(boxItem.drawerSlot);
+              destinationSlotMap.set(boxItem.id, boxItem.drawerSlot);
+              return;
+            }
+
+            const allocatedSlot = allocateNextSlot();
+            destinationSlotMap.set(boxItem.id, allocatedSlot);
+          });
+        }
+      }
+
       const updatedBoxes = state.boxes.map(b => {
         if (!bulkSelectedIds.includes(b.id)) return b;
         return {
@@ -1568,6 +1831,7 @@ export default function App() {
           shelfId: destination.shelfId,
           rackId: destination.rackId,
           drawerId: destination.drawerId,
+          drawerSlot: destination.drawerId ? (destinationSlotMap.get(b.id) ?? null) : null,
           shelfCol: null
         };
       });
@@ -3266,8 +3530,59 @@ export default function App() {
                     </div>
                     {(() => {
                       const drawerBoxes = state.boxes.filter(b => b.drawerId === currentDrawer.id && !b.isArchived);
+                          const drawerCapacity = getDrawerCapacity(currentDrawer);
+                          const slottedBoxMap = new Map<number, Box>();
+                          const unslottedBoxes: Box[] = [];
+
+                          drawerBoxes.forEach(box => {
+                            if (
+                              typeof box.drawerSlot === "number" &&
+                              box.drawerSlot >= 1 &&
+                              box.drawerSlot <= drawerCapacity &&
+                              !slottedBoxMap.has(box.drawerSlot)
+                            ) {
+                              slottedBoxMap.set(box.drawerSlot, box);
+                              return;
+                            }
+                            unslottedBoxes.push(box);
+                          });
+
                       return (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 overflow-y-auto pb-4 flex-1">
+                            <div className="space-y-4 overflow-y-auto pb-4 flex-1">
+                              <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-2">
+                                <div className="flex items-center justify-between text-[11px] font-semibold text-slate-600">
+                                  <span>Drawer Slots</span>
+                                  <span>{slottedBoxMap.size}/{drawerCapacity} occupied</span>
+                                </div>
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                  {Array.from({ length: drawerCapacity }, (_, idx) => idx + 1).map(slotNum => {
+                                    const slotBox = slottedBoxMap.get(slotNum);
+                                    return (
+                                      <button
+                                        key={slotNum}
+                                        onClick={() => {
+                                          if (slotBox) {
+                                            setSelectedBoxId(slotBox.id);
+                                            return;
+                                          }
+                                          handleOpenNewBoxModal(slotNum);
+                                        }}
+                                        className={`text-left rounded-md border px-2 py-1.5 text-[10px] transition-colors ${slotBox ? "bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100" : "bg-white border-slate-200 text-slate-400"}`}
+                                      >
+                                        <div className="font-bold">Slot {slotNum}</div>
+                                        <div className="truncate">{slotBox ? slotBox.name : "Empty"}</div>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                                {unslottedBoxes.length > 0 ? (
+                                  <p className="text-[10px] text-amber-700">
+                                    {unslottedBoxes.length} box(es) have no assigned slot yet. Edit each box to assign a drawer slot.
+                                  </p>
+                                ) : null}
+                              </div>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                           {drawerBoxes.map(box => {
                             const samplesCount = getBoxSamplesCount(box.id);
                             return (
@@ -3315,6 +3630,9 @@ export default function App() {
                                   <p className="text-[10px] text-slate-400">
                                     {box.rows && box.cols ? `Grid Coordinate layout (${box.rows}x${box.cols})` : "Free-form layout"}
                                   </p>
+                                  <p className="text-[10px] text-slate-400">
+                                    Drawer slot: {typeof box.drawerSlot === "number" ? box.drawerSlot : "Unassigned"}
+                                  </p>
                                 </div>
                                 <div className="flex items-center justify-between text-[10px] font-semibold text-slate-500 mt-2">
                                   <span className="flex items-center gap-1">
@@ -3328,13 +3646,10 @@ export default function App() {
                               </div>
                             );
                           })}
+                          </div>
                           {/* Add box card */}
                           <div
-                            onClick={() => {
-                              setEditingStorageItem(null);
-                              setStorageModalMode("box");
-                              setStorageModalOpen(true);
-                            }}
+                            onClick={() => handleOpenNewBoxModal(null)}
                             className="flex flex-col items-center justify-center border-2 border-dashed border-slate-200 hover:border-indigo-400 bg-slate-50/40 hover:bg-indigo-50/5 rounded-xl p-4 h-32 transition-all duration-200 cursor-pointer text-slate-400 hover:text-indigo-600 text-center group"
                           >
                             <Plus className="h-5 w-5 mb-1.5 text-slate-300 group-hover:text-indigo-500 group-hover:scale-110 transition-transform" />
@@ -5296,7 +5611,10 @@ export default function App() {
 
       <StorageFormModal
         isOpen={storageModalOpen}
-        onClose={() => setStorageModalOpen(false)}
+        onClose={() => {
+          setStorageModalOpen(false);
+          setBoxDefaultDrawerSlot(null);
+        }}
         onSaveStorage={handleSaveStorage}
         onSaveShelf={handleSaveShelf}
         onSaveRack={handleSaveRack}
@@ -5308,10 +5626,12 @@ export default function App() {
         shelves={state.shelves}
         racks={state.racks}
         drawers={state.drawers}
+        boxes={state.boxes}
         preselectedStorageId={selectedStorageId}
         preselectedShelfId={selectedShelfId}
         preselectedRackId={selectedRackId}
         preselectedDrawerId={selectedDrawerId}
+        preselectedDrawerSlot={boxDefaultDrawerSlot}
       />
     </div>
   );

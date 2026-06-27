@@ -6,8 +6,20 @@ interface StorageFormModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSaveStorage: (unit: Omit<StorageUnit, "id"> & { id?: string }) => void;
-  onSaveShelf: (shelf: Omit<Shelf, "id"> & { id?: string }) => void;
-  onSaveRack: (rack: Omit<Rack, "id"> & { id?: string }) => void;
+  onSaveShelf: (
+    shelf: Omit<Shelf, "id"> & {
+      id?: string;
+      defaultRackRows?: number | null;
+      defaultRackCols?: number | null;
+      defaultDrawerBoxCapacity?: number | null;
+    }
+  ) => void;
+  onSaveRack: (
+    rack: Omit<Rack, "id"> & {
+      id?: string;
+      defaultDrawerBoxCapacity?: number | null;
+    }
+  ) => void;
   onSaveDrawer: (drawer: Omit<Drawer, "id"> & { id?: string }) => void;
   onSaveBox: (box: Omit<Box, "id"> & { id?: string }) => void;
   mode: "storage" | "shelf" | "rack" | "drawer" | "box";
@@ -16,10 +28,12 @@ interface StorageFormModalProps {
   shelves: Shelf[];
   racks: Rack[];
   drawers: Drawer[];
+  boxes: Box[];
   preselectedStorageId?: string;
   preselectedShelfId?: string;
   preselectedRackId?: string;
   preselectedDrawerId?: string;
+  preselectedDrawerSlot?: number | null;
 }
 
 export default function StorageFormModal({
@@ -36,10 +50,12 @@ export default function StorageFormModal({
   shelves,
   racks,
   drawers,
+  boxes,
   preselectedStorageId,
   preselectedShelfId,
   preselectedRackId,
-  preselectedDrawerId
+  preselectedDrawerId,
+  preselectedDrawerSlot
 }: StorageFormModalProps) {
   // Common
   const [name, setName] = useState("");
@@ -53,6 +69,8 @@ export default function StorageFormModal({
   const [shelfId, setShelfId] = useState("");
   const [rackId, setRackId] = useState("");
   const [drawerId, setDrawerId] = useState("");
+  const [drawerSlot, setDrawerSlot] = useState<number | "">("");
+  const [drawerBoxCapacity, setDrawerBoxCapacity] = useState<number>(4);
 
   // Grid specific (for boxes or racks)
   const [isGridLayout, setIsGridLayout] = useState(true);
@@ -62,6 +80,10 @@ export default function StorageFormModal({
   // Shelf Layout Specific
   const [isShelfGridLayout, setIsShelfGridLayout] = useState(false);
   const [shelfCols, setShelfCols] = useState<number>(6); // Default 6 racks across
+  const [shelfRackRows, setShelfRackRows] = useState<number>(6);
+  const [shelfRackCols, setShelfRackCols] = useState<number>(1);
+  const [shelfDrawerBoxCapacity, setShelfDrawerBoxCapacity] = useState<number>(4);
+  const [rackDrawerBoxCapacity, setRackDrawerBoxCapacity] = useState<number>(4);
   const [shelfCol, setShelfCol] = useState<number | "">(""); // column slot position on shelf
 
   // Load edit item values or defaults
@@ -82,6 +104,12 @@ export default function StorageFormModal({
             setIsShelfGridLayout(false);
             setShelfCols(6);
           }
+
+          const firstRackOnShelf = racks.find(r => r.shelfId === s.id && !r.isArchived);
+          setShelfRackRows(firstRackOnShelf?.rows || 6);
+          setShelfRackCols(firstRackOnShelf?.cols || 1);
+          const firstDrawerOnShelf = drawers.find(d => d.shelfId === s.id && !d.isArchived);
+          setShelfDrawerBoxCapacity(firstDrawerOnShelf?.boxCapacity || 4);
         } else if (mode === "rack") {
           const r = editItem as Rack;
           setStorageId(r.storageId);
@@ -94,17 +122,22 @@ export default function StorageFormModal({
           } else {
             setIsGridLayout(false);
           }
+
+          const firstDrawerOnRack = drawers.find(d => d.rackId === r.id && !d.isArchived);
+          setRackDrawerBoxCapacity(firstDrawerOnRack?.boxCapacity || 4);
         } else if (mode === "drawer") {
           const d = editItem as Drawer;
           setStorageId(d.storageId);
           setShelfId(d.shelfId);
           setRackId(d.rackId);
+          setDrawerBoxCapacity(Math.max(1, Math.min(500, Number(d.boxCapacity) || 4)));
         } else if (mode === "box") {
           const b = editItem as Box;
           setStorageId(b.storageId);
           setShelfId(b.shelfId);
           setRackId(b.rackId || "");
           setDrawerId(b.drawerId || "");
+          setDrawerSlot(b.drawerSlot || "");
           setShelfCol(b.shelfCol || "");
           if (b.rows && b.cols) {
             setIsGridLayout(true);
@@ -121,16 +154,22 @@ export default function StorageFormModal({
         setShelfId(preselectedShelfId || "");
         setRackId(preselectedRackId || "");
         setDrawerId(preselectedDrawerId || "");
+        setDrawerSlot(preselectedDrawerSlot || "");
+        setDrawerBoxCapacity(4);
         setIsGridLayout(true);
         setRows(mode === "rack" ? 6 : 8);
         setCols(mode === "rack" ? 1 : 8);
 
         setIsShelfGridLayout(false);
         setShelfCols(6);
+        setShelfRackRows(6);
+        setShelfRackCols(1);
+        setShelfDrawerBoxCapacity(4);
+        setRackDrawerBoxCapacity(4);
         setShelfCol("");
       }
     }
-  }, [isOpen, editItem, mode, preselectedStorageId, preselectedShelfId, preselectedRackId, preselectedDrawerId, storageUnits]);
+  }, [isOpen, editItem, mode, preselectedStorageId, preselectedShelfId, preselectedRackId, preselectedDrawerId, preselectedDrawerSlot, storageUnits, racks, drawers]);
 
   // Handle cascading selections
   useEffect(() => {
@@ -169,6 +208,47 @@ export default function StorageFormModal({
     }
   }, [rackId, drawers, mode, editItem]);
 
+  useEffect(() => {
+    if (mode !== "box") return;
+    if (!drawerId) {
+      setDrawerSlot("");
+      return;
+    }
+
+    const selectedDrawer = drawers.find(d => d.id === drawerId && !d.isArchived);
+    const selectedDrawerCapacity = Math.max(1, Math.min(500, Number(selectedDrawer?.boxCapacity) || 4));
+    if (!selectedDrawer) {
+      setDrawerSlot("");
+      return;
+    }
+
+    const occupiedSlots = new Set(
+      boxes
+        .filter(
+          b =>
+            !b.isArchived &&
+            b.drawerId === drawerId &&
+            b.id !== editItem?.id &&
+            typeof b.drawerSlot === "number"
+        )
+        .map(b => b.drawerSlot as number)
+    );
+
+    const currentSlot = typeof drawerSlot === "number" ? drawerSlot : null;
+    if (
+      currentSlot &&
+      currentSlot >= 1 &&
+      currentSlot <= selectedDrawerCapacity &&
+      !occupiedSlots.has(currentSlot)
+    ) {
+      return;
+    }
+
+    const firstFreeSlot = Array.from({ length: selectedDrawerCapacity }, (_, idx) => idx + 1)
+      .find(slot => !occupiedSlots.has(slot));
+    setDrawerSlot(firstFreeSlot || "");
+  }, [mode, drawerId, drawers, boxes, editItem, drawerSlot]);
+
   if (!isOpen) return null;
 
   const handleSave = () => {
@@ -195,6 +275,9 @@ export default function StorageFormModal({
         storageId,
         name: name.trim(),
         cols: isShelfGridLayout ? Number(shelfCols) : null,
+        defaultRackRows: isShelfGridLayout ? Number(shelfRackRows) : null,
+        defaultRackCols: isShelfGridLayout ? Number(shelfRackCols) : null,
+        defaultDrawerBoxCapacity: isShelfGridLayout ? Number(shelfDrawerBoxCapacity) : null,
         isArchived: false
       });
     } else if (mode === "rack") {
@@ -231,6 +314,7 @@ export default function StorageFormModal({
         name: name.trim(),
         rows: rowVal,
         cols: colVal,
+        defaultDrawerBoxCapacity: Number(rackDrawerBoxCapacity),
         shelfCol: selectedShelf && selectedShelf.cols && shelfCol ? Number(shelfCol) : null,
         isArchived: false
       });
@@ -254,6 +338,7 @@ export default function StorageFormModal({
         shelfId,
         rackId,
         name: name.trim(),
+        boxCapacity: Number(drawerBoxCapacity),
         isArchived: false
       });
     } else if (mode === "box") {
@@ -283,12 +368,43 @@ export default function StorageFormModal({
       }
 
       const selectedShelf = shelves.find(s => s.id === shelfId && !s.isArchived);
+      const selectedDrawerForSave = drawerId ? drawers.find(d => d.id === drawerId && !d.isArchived) : undefined;
+      const selectedDrawerForSaveCapacity = selectedDrawerForSave
+        ? Math.max(1, Math.min(500, Number(selectedDrawerForSave.boxCapacity) || 4))
+        : null;
+      const occupiedSlotsForSave = selectedDrawerForSaveCapacity
+        ? new Set(
+            boxes
+              .filter(
+                b =>
+                  !b.isArchived &&
+                  b.drawerId === selectedDrawerForSave.id &&
+                  b.id !== editItem?.id &&
+                  typeof b.drawerSlot === "number"
+              )
+              .map(b => b.drawerSlot as number)
+          )
+        : new Set<number>();
+
+      if (drawerId && selectedDrawerForSaveCapacity) {
+        const chosenSlot = Number(drawerSlot);
+        if (!chosenSlot || chosenSlot < 1 || chosenSlot > selectedDrawerForSaveCapacity) {
+          setValidationError(`Please choose a drawer slot between 1 and ${selectedDrawerForSaveCapacity}.`);
+          return;
+        }
+        if (occupiedSlotsForSave.has(chosenSlot)) {
+          setValidationError(`Drawer slot ${chosenSlot} is already occupied.`);
+          return;
+        }
+      }
+
       onSaveBox({
         id: editItem?.id,
         storageId,
         shelfId,
         rackId: rackId || null,
         drawerId: drawerId || null,
+        drawerSlot: drawerId && selectedDrawerForSaveCapacity ? Number(drawerSlot) : null,
         name: name.trim(),
         rows: rowVal,
         cols: colVal,
@@ -324,6 +440,25 @@ export default function StorageFormModal({
   const filteredShelves = shelves.filter(s => s.storageId === storageId && !s.isArchived);
   const filteredRacks = racks.filter(r => r.shelfId === shelfId && !r.isArchived);
   const filteredDrawers = drawers.filter(d => d.rackId === rackId && !d.isArchived);
+  const selectedDrawerForBox = mode === "box" && drawerId
+    ? drawers.find(d => d.id === drawerId && !d.isArchived)
+    : undefined;
+  const selectedDrawerCapacity = selectedDrawerForBox
+    ? Math.max(1, Math.min(500, Number(selectedDrawerForBox.boxCapacity) || 4))
+    : null;
+  const occupiedDrawerSlots = selectedDrawerCapacity
+    ? new Set(
+        boxes
+          .filter(
+            b =>
+              !b.isArchived &&
+              b.drawerId === selectedDrawerForBox.id &&
+              b.id !== editItem?.id &&
+              typeof b.drawerSlot === "number"
+          )
+          .map(b => b.drawerSlot as number)
+      )
+    : new Set<number>();
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
@@ -451,8 +586,49 @@ export default function StorageFormModal({
                         className="w-full px-3 py-1.5 border border-slate-200 rounded-lg bg-white text-sm"
                       />
                     </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs font-medium text-slate-600 mb-0.5">
+                          Default Rack Rows (1-20)
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="20"
+                          value={shelfRackRows}
+                          onChange={e => setShelfRackRows(Math.max(1, Math.min(20, Number(e.target.value) || 1)))}
+                          className="w-full px-3 py-1.5 border border-slate-200 rounded-lg bg-white text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-600 mb-0.5">
+                          Default Rack Cols (1-20)
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="20"
+                          value={shelfRackCols}
+                          onChange={e => setShelfRackCols(Math.max(1, Math.min(20, Number(e.target.value) || 1)))}
+                          className="w-full px-3 py-1.5 border border-slate-200 rounded-lg bg-white text-sm"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-0.5">
+                        Boxes per Drawer Capacity (1-500)
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="500"
+                        value={shelfDrawerBoxCapacity}
+                        onChange={e => setShelfDrawerBoxCapacity(Math.max(1, Math.min(500, Number(e.target.value) || 1)))}
+                        className="w-full px-3 py-1.5 border border-slate-200 rounded-lg bg-white text-sm"
+                      />
+                    </div>
                     <p className="text-[11px] text-slate-500 leading-relaxed">
-                      Aligns and positions racks or direct containers horizontally across the shelf.
+                      New rack slots will be auto-created alphabetically (A, B, C...). Each rack gets drawers based on row count, and each drawer stores only a capacity value (no empty boxes are created).
                     </p>
                   </div>
                 ) : (
@@ -591,6 +767,19 @@ export default function StorageFormModal({
                     <div className="col-span-2 text-center text-xs text-slate-500 font-mono py-1 bg-white border border-slate-100 rounded-md">
                       Total slots capacity: {rows * cols} boxes/drawers
                     </div>
+                    <div className="col-span-2">
+                      <label className="block text-xs font-medium text-slate-600 mb-0.5">
+                        Boxes per Drawer Capacity (1-500)
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="500"
+                        value={rackDrawerBoxCapacity}
+                        onChange={e => setRackDrawerBoxCapacity(Math.max(1, Math.min(500, Number(e.target.value) || 1)))}
+                        className="w-full px-3 py-1.5 border border-slate-200 rounded-lg bg-white text-sm"
+                      />
+                    </div>
                   </div>
                 ) : (
                   <p className="text-xs text-slate-500 italic">
@@ -666,6 +855,20 @@ export default function StorageFormModal({
                   ))}
                 </select>
               </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                  Number of Box Slots (1-500)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="500"
+                  value={drawerBoxCapacity}
+                  onChange={e => setDrawerBoxCapacity(Math.max(1, Math.min(500, Number(e.target.value) || 1)))}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm focus:ring-2 focus:ring-indigo-500 outline-hidden"
+                />
+              </div>
             </div>
           )}
 
@@ -683,6 +886,7 @@ export default function StorageFormModal({
                       setShelfId("");
                       setRackId("");
                       setDrawerId("");
+                      setDrawerSlot("");
                     }}
                     className="w-full px-3.5 py-2 border border-slate-200 rounded-lg bg-white text-xs focus:ring-2 focus:ring-indigo-500 outline-hidden"
                   >
@@ -705,6 +909,7 @@ export default function StorageFormModal({
                       setShelfId(e.target.value);
                       setRackId("");
                       setDrawerId("");
+                      setDrawerSlot("");
                     }}
                     disabled={!storageId}
                     className="w-full px-3.5 py-2 border border-slate-200 rounded-lg bg-white text-xs focus:ring-2 focus:ring-indigo-500 outline-hidden disabled:opacity-60"
@@ -729,6 +934,7 @@ export default function StorageFormModal({
                     onChange={e => {
                       setRackId(e.target.value);
                       setDrawerId("");
+                      setDrawerSlot("");
                     }}
                     disabled={!shelfId}
                     className="w-full px-3.5 py-2 border border-slate-200 rounded-lg bg-white text-xs focus:ring-2 focus:ring-indigo-500 outline-hidden disabled:opacity-60"
@@ -748,7 +954,10 @@ export default function StorageFormModal({
                   </label>
                   <select
                     value={drawerId}
-                    onChange={e => setDrawerId(e.target.value)}
+                    onChange={e => {
+                      setDrawerId(e.target.value);
+                      setDrawerSlot("");
+                    }}
                     disabled={!rackId}
                     className="w-full px-3.5 py-2 border border-slate-200 rounded-lg bg-white text-xs focus:ring-2 focus:ring-indigo-500 outline-hidden disabled:opacity-60"
                   >
@@ -761,6 +970,30 @@ export default function StorageFormModal({
                   </select>
                 </div>
               </div>
+
+              {selectedDrawerForBox && selectedDrawerCapacity ? (
+                <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl space-y-2">
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                    Drawer Position Slot (1 to {selectedDrawerCapacity})
+                  </label>
+                  <select
+                    value={drawerSlot}
+                    onChange={e => setDrawerSlot(e.target.value ? Number(e.target.value) : "")}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm outline-hidden"
+                  >
+                    <option value="">-- Select Available Slot --</option>
+                    {Array.from({ length: selectedDrawerCapacity }, (_, idx) => idx + 1).map(slotNum => (
+                      <option
+                        key={slotNum}
+                        value={slotNum}
+                        disabled={occupiedDrawerSlots.has(slotNum)}
+                      >
+                        {occupiedDrawerSlots.has(slotNum) ? `Slot ${slotNum} (Occupied)` : `Slot ${slotNum} (Available)`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
 
               {/* Optional Shelf Position for Direct Box */}
               {!rackId && (() => {

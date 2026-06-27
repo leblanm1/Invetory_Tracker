@@ -36,6 +36,7 @@ export interface Drawer {
   shelfId: string;
   storageId: string;
   name: string;
+  boxCapacity?: number | null;
   isArchived?: boolean;
 }
 
@@ -45,6 +46,7 @@ export interface Box {
   storageId: string;
   rackId?: string | null;   // optional link to a rack inside the shelf
   drawerId?: string | null; // optional link to a drawer inside the rack
+  drawerSlot?: number | null;
   name: string;
   rows: number | null; // null if free-form box (not grid)
   cols: number | null; // null if free-form box (not grid)
