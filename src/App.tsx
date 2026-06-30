@@ -403,10 +403,17 @@ export default function App() {
         auditSnapshots: [newSnapshot, ...(updatedState.auditSnapshots || [])].slice(0, 1000)
       };
 
+      // Send only incremental audit entries to keep request bodies small.
+      const payloadForServer: InventoryState = {
+        ...finalState,
+        auditLogs: [newLog],
+        auditSnapshots: [newSnapshot]
+      };
+
       const res = await fetch("/api/inventory", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(finalState)
+        body: JSON.stringify(payloadForServer)
       });
 
       if (res.ok) {

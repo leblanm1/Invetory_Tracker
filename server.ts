@@ -489,6 +489,16 @@ async function startServer() {
     }
   });
 
+  app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (err?.type === "entity.too.large") {
+      res.status(413).json({
+        error: "Request payload too large. Try importing data via the JSON import flow for very large datasets."
+      });
+      return;
+    }
+    next(err);
+  });
+
   // Export full JSON database
   app.get("/api/export", async (req, res) => {
     try {
