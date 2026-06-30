@@ -24,7 +24,9 @@ import {
   Inbox, 
   HelpCircle,
   FileText,
-  Move
+  Move,
+  ChevronDown,
+  ChevronRight
 } from "lucide-react";
 import { StorageUnit, Shelf, Box, Sample, AuditLog, InventoryState, Rack, Drawer, AuditSnapshot } from "./types.js";
 import { convertSamplesToCSV } from "./utils.js";
@@ -43,6 +45,12 @@ const DEFAULT_USERS = [
 const CURRENT_USER_STORAGE_KEY = "inventory-current-user";
 
 export default function App() {
+  const storageTypeOrder: Record<StorageUnit["type"], number> = {
+    freezer: 0,
+    refrigerator: 1,
+    room_temp: 2,
+  };
+
   // State from server
   const [state, setState] = useState<InventoryState>({
     users: DEFAULT_USERS,
@@ -109,6 +117,36 @@ export default function App() {
   const [listFilter, setListFilter] = useState<"all" | "loose">("all");
   const [sortField, setSortField] = useState<"chemicalName" | "casNumber" | "qty" | "itemType" | "location">("chemicalName");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [collapsedStorageTypes, setCollapsedStorageTypes] = useState<Record<StorageUnit["type"], boolean>>({
+    freezer: false,
+    refrigerator: false,
+    room_temp: false,
+  });
+
+  const sortedActiveStorageUnits = useMemo(() => {
+    return state.storageUnits
+      .filter(unit => !unit.isArchived)
+      .sort((a, b) => {
+        const typeDiff = storageTypeOrder[a.type] - storageTypeOrder[b.type];
+        if (typeDiff !== 0) return typeDiff;
+        return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
+      });
+  }, [state.storageUnits]);
+
+  const groupedSidebarStorageUnits = useMemo(() => {
+    const sectionDefs: { type: StorageUnit["type"]; label: string }[] = [
+      { type: "freezer", label: "Freezers" },
+      { type: "refrigerator", label: "Refrigerators" },
+      { type: "room_temp", label: "Room Temperature" },
+    ];
+
+    return sectionDefs
+      .map(section => ({
+        ...section,
+        units: sortedActiveStorageUnits.filter(unit => unit.type === section.type),
+      }))
+      .filter(section => section.units.length > 0);
+  }, [sortedActiveStorageUnits]);
 
   // Format full physical storage location string for a sample
   const getSampleLocationPath = (sample: Sample) => {
@@ -2614,7 +2652,7 @@ export default function App() {
           {/* Storage Units Selectors */}
           <div className="p-4 border-b border-slate-100 flex-1 overflow-y-auto space-y-4">
             <div className="flex items-center justify-between mb-2">
-              <h2 className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Refrigerators & Freezers</h2>
+              <h2 className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Storage Units</h2>
               <button 
                 onClick={() => {
                   setEditingStorageItem(null);
@@ -2628,8 +2666,29 @@ export default function App() {
               </button>
             </div>
 
-            <div className="space-y-1">
-              {state.storageUnits.filter(u => !u.isArchived).map(unit => {
+            <div className="space-y-2">
+              {groupedSidebarStorageUnits.map(section => (
+                <div key={section.type} className="space-y-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCollapsedStorageTypes(prev => ({
+                        ...prev,
+                        [section.type]: !prev[section.type],
+                      }));
+                    }}
+                    className="w-full px-1 py-0.5 flex items-center justify-between rounded text-[9px] font-bold uppercase tracking-wider text-slate-400 hover:bg-slate-50"
+                    title={`${collapsedStorageTypes[section.type] ? "Expand" : "Collapse"} ${section.label}`}
+                  >
+                    <span className="flex items-center gap-1">
+                      {collapsedStorageTypes[section.type] ? <ChevronRight className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                      {section.label}
+                    </span>
+                    <span className="text-[8px] font-semibold text-slate-300">{section.units.length}</span>
+                  </button>
+                  {!collapsedStorageTypes[section.type] && (
+                  <div className="space-y-1">
+              {section.units.map(unit => {
                 const isActive = selectedStorageId === unit.id;
                 const unitShelves = state.shelves.filter(s => s.storageId === unit.id && !s.isArchived);
                 return (
@@ -3083,8 +3142,12 @@ export default function App() {
                   </div>
                 );
               })}
+                  </div>
+                  )}
+                </div>
+              ))}
 
-              {state.storageUnits.filter(u => !u.isArchived).length === 0 && (
+              {sortedActiveStorageUnits.length === 0 && (
                 <div className="text-center py-6">
                   <p className="text-xs text-slate-400">No refrigerators or freezers initialized.</p>
                   <button
@@ -5182,15 +5245,15 @@ export default function App() {
                     })()}
                   </div>
                 ) : (
-                  /* 6. Root/Lab Level - Shows all active Refrigerators & Freezers */
+                  /* 6. Root/Lab Level - Shows all active Storage Units */
                   <div className="space-y-4 flex-1 flex flex-col">
                     <div className="flex items-center justify-between">
                       <h4 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider">
-                        Refrigerators & Freezers ({state.storageUnits.filter(u => !u.isArchived).length})
+                        Storage Units ({sortedActiveStorageUnits.length})
                       </h4>
                     </div>
                     {(() => {
-                      const activeUnits = state.storageUnits.filter(u => !u.isArchived);
+                      const activeUnits = sortedActiveStorageUnits;
                       return (
                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 overflow-y-auto pb-4 flex-1">
                           {activeUnits.map(unit => {
